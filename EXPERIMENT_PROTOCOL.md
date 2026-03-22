@@ -105,7 +105,15 @@ Minimum summary outputs:
 
 ## Logging schema
 
-Each run record should contain, at minimum:
+Each run record **must** contain the following fields. Records missing mandatory fields are invalid and must be rejected by the benchmark harness.
+
+**Critical reproducibility fields** (see DECISION_LOG.md DL-20260322-03):
+- `model_sha256`: SHA-256 hash of the exact model file used.
+- `llama_cpp_commit`: Full 40-character git commit hash of the llama.cpp build.
+- `seed`: Fixed RNG seed (must be `42` for comparable runs).
+- `quantization`: Must be `Q4_0` for core benchmark comparisons.
+
+### Mandatory fields at minimum:
 
 ### Run identity
 - timestamp,
@@ -118,20 +126,23 @@ Each run record should contain, at minimum:
 - laptop identifier,
 - phone identifier,
 - OS/build metadata,
-- llama.cpp commit/build metadata,
+- llama.cpp commit hash (**mandatory**, full 40-character git hash),
+- llama.cpp build flags,
+- server launch arguments,
 - server mode (`local` / `reverse_tethered`),
 - accelerator mode (`cpu`, `gpu_opencl`, `npu_experimental`).
 
 ### Model/settings metadata
-- model name,
-- parameter count if known,
-- quantization,
+- model name (full HuggingFace-style identifier),
+- model filename (exact GGUF filename),
+- parameter count,
+- quantization (must be `Q4_0`),
+- model file SHA-256 hash (**mandatory**, 64 hex characters),
 - context length,
-- seed,
-- sampling config,
-- max new tokens,
-- stopping config,
-- file checksum.
+- seed (**mandatory**, must be `42`),
+- sampling config (temperature `0.0`),
+- max new tokens (`n_predict`),
+- stopping config.
 
 ### Prompt/output metadata
 - prompt id,
