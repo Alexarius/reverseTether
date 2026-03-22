@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/server_metadata_schema.json",
+  "title": "Phone Server Metadata",
+  "description": "Schema for capturing phone-side llama.cpp server metadata for benchmark reproducibility",
+  "type": "object",
+  "required": ["schema_version", "capture_timestamp", "llama_cpp", "device"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Version of this metadata schema",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "capture_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when metadata was captured"
+    },
+    "llama_cpp": {
+      "type": "object",
+      "description": "llama.cpp build and version information",
+      "required": ["commit_hash"],
+      "properties": {
+        "directory": {
+          "type": "string",
+          "description": "Path to llama.cpp installation"
+        },
+        "commit_hash": {
+          "type": "string",
+          "description": "Git commit SHA of llama.cpp build"
+        },
+        "commit_date": {
+          "type": "string",
+          "description": "ISO 8601 date of the commit"
+        },
+        "dirty": {
+          "type": ["boolean", "string"],
+          "description": "Whether the build has uncommitted changes"
+        }
+      }
+    },
+    "device": {
+      "type": "object",
+      "description": "Device hardware and software information",
+      "properties": {
+        "android": {
+          "type": "object",
+          "description": "Android OS information",
+          "properties": {
+            "sdk_version": {
+              "type": "string",
+              "description": "Android SDK version"
+            },
+            "release": {
+              "type": "string",
+              "description": "Android version release"
+            },
+            "device": {
+              "type": "string",
+              "description": "Device codename"
+            },
+            "model": {
+              "type": "string",
+              "description": "Device model name"
+            }
+          }
+        },
+        "termux_version": {
+          "type": "string",
+          "description": "Termux application version"
+        },
+        "cpu": {
+          "type": "object",
+          "description": "CPU information",
+          "properties": {
+            "model": {
+              "type": "string",
+              "description": "CPU model name or hardware identifier"
+            },
+            "cores": {
+              "type": ["string", "integer"],
+              "description": "Number of CPU cores"
+            }
+          }
+        },
+        "memory": {
+          "type": "object",
+          "description": "Memory information",
+          "properties": {
+            "total_kb": {
+              "type": ["string", "integer"],
+              "description": "Total memory in kilobytes"
+            },
+            "available_kb": {
+              "type": ["string", "integer"],
+              "description": "Available memory in kilobytes"
+            }
+          }
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "description": "Runtime environment state",
+      "properties": {
+        "battery_level_percent": {
+          "type": ["string", "integer"],
+          "description": "Battery charge percentage"
+        },
+        "battery_status": {
+          "type": "string",
+          "description": "Battery charging status (Charging, Discharging, Full, etc.)"
+        },
+        "thermal_zones": {
+          "type": "array",
+          "description": "Thermal zone readings",
+          "items": {
+            "type": "object",
+            "properties": {
+              "zone": {
+                "type": "string",
+                "description": "Thermal zone identifier"
+              },
+              "type": {
+                "type": "string",
+                "description": "Thermal zone type"
+              },
+              "temp_millicelsius": {
+                "type": ["string", "integer"],
+                "description": "Temperature in millicelsius"
+              }
+            }
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "object",
+      "description": "Manual observations and notes",
+      "properties": {
+        "background_apps_minimized": {
+          "type": ["boolean", "null"],
+          "description": "Whether background apps were minimized before capture"
+        },
+        "manual_observations": {
+          "type": ["string", "null"],
+          "description": "Any manual observations about device state"
+        }
+      }
+    },
+    "server_config": {
+      "type": "object",
+      "description": "Server launch configuration (optional, can be added manually)",
+      "properties": {
+        "model_path": {
+          "type": "string",
+          "description": "Path to the GGUF model file"
+        },
+        "context_length": {
+          "type": "integer",
+          "description": "Context length (-c flag)"
+        },
+        "gpu_layers": {
+          "type": "integer",
+          "description": "GPU offload layers (-ngl flag)"
+        },
+        "port": {
+          "type": "integer",
+          "description": "Server port"
+        },
+        "host": {
+          "type": "string",
+          "description": "Server bind address"
+        },
+        "backend": {
+          "type": "string",
+          "enum": ["cpu", "gpu_opencl", "npu_experimental"],
+          "description": "Accelerator backend used"
+        }
+      }
+    }
+  }
+}
