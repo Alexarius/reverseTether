@@ -1,0 +1,15 @@
+{
+  "node": "yoga",
+  "backend": "cpu",
+  "run_type": "warm",
+  "prompt_tier": "short",
+  "server_mode": "local",
+  "host": "127.0.0.1",
+  "port": 8080,
+  "model_name": "",
+  "quantization": "Q4_0",
+  "context_length": 2048,
+  "seed": 42,
+  "temperature": 0.0,
+  "max_new_tokens": 512
+}
