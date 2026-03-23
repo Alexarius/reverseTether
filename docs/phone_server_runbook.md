@@ -88,9 +88,124 @@ LD_LIBRARY_PATH=/vendor/lib64 ./build/bin/llama-server \
 
 - `-ngl 99`: Offload all layers to GPU
 
-## Health Check Procedures
+## ADB Port Forwarding (Laptop Side)
 
-After launching the server, validate it is running correctly.
+Before the laptop can communicate with the phone server, ADB port forwarding must be established.
+
+### Prerequisites
+
+- ADB installed and in PATH on the laptop
+- Phone connected via USB with USB debugging enabled
+- Developer options enabled on the phone
+
+### Bootstrap Script
+
+Run the bootstrap script to set up port forwarding:
+
+```bash
+./scripts/adb_bootstrap.sh
+```
+
+This script:
+1. Verifies an ADB device is connected
+2. Sets up `tcp:8080 -> tcp:8080` port forwarding
+3. Validates the forwarding rule is active
+
+### Manual ADB Commands
+
+If the script is unavailable, use these commands:
+
+```bash
+# Check device connection
+adb devices
+
+# Set up port forwarding
+adb forward tcp:8080 tcp:8080
+
+# Verify forwarding rule
+adb forward --list
+```
+
+## Preflight Check (Laptop Side)
+
+Before running benchmarks, validate the entire connection chain using the preflight command.
+
+### Running Preflight
+
+```bash
+python -m client.preflight
+```
+
+**Expected output (success)**:
+```
+Preflight Check Results
+========================================
+  ADB Device:      [OK]
+  Port Forwarding: [OK]
+  Server Health:   [OK]
+========================================
+
+All preflight checks passed. Ready for benchmark.
+```
+
+### Preflight for Local Testing
+
+When testing with a local laptop server (no phone), skip ADB checks:
+
+```bash
+python -m client.preflight --skip-adb
+```
+
+### Preflight Failure Cases
+
+**ADB device not found**:
+```
+Preflight Check Results
+========================================
+  ADB Device:      [FAIL]
+  Port Forwarding: [FAIL]
+  Server Health:   [FAIL]
+========================================
+
+Error: ADB device offline or not found.
+```
+
+**Port forwarding not active**:
+```
+Preflight Check Results
+========================================
+  ADB Device:      [OK]
+  Port Forwarding: [FAIL]
+  Server Health:   [FAIL]
+========================================
+
+Error: Port forwarding not active. Run: adb forward tcp:8080 tcp:8080
+```
+
+**Server not running**:
+```
+Preflight Check Results
+========================================
+  ADB Device:      [OK]
+  Port Forwarding: [OK]
+  Server Health:   [FAIL]
+========================================
+
+Error: Connection refused on 127.0.0.1:8080. Is the llama.cpp server running on the phone?
+```
+
+### Preflight and Measurement Integrity
+
+The preflight check uses only the `/health` endpoint, which:
+- Does not trigger model inference
+- Does not allocate generation caches
+- Does not warm up the model
+
+The HTTP session used for preflight is explicitly closed afterward to prevent connection reuse artifacts (TCP handshake skip) during the first benchmark run.
+
+## Health Check Procedures (On-Phone)
+
+After launching the server, validate it is running correctly from within Termux.
 
 ### Health Endpoint Check
 
@@ -160,6 +275,8 @@ Run this checklist before starting benchmark runs:
 - [ ] **Model File**: Verify model file integrity (checksum if available)
 - [ ] **Server Arguments**: Confirm launch flags match the intended condition (CPU vs GPU)
 - [ ] **Metadata Capture**: Run `capture_phone_metadata.sh` and verify output
+- [ ] **ADB Bootstrap**: Run `./scripts/adb_bootstrap.sh` on laptop
+- [ ] **Preflight Check**: Run `python -m client.preflight` and confirm all checks pass
 
 ## Troubleshooting
 
@@ -227,3 +344,5 @@ When reporting results, always include:
 - `configs/server_metadata_schema.json`: JSON schema for metadata capture
 - `scripts/launch_phone_server.sh`: Wrapper script for reproducible launch
 - `scripts/capture_phone_metadata.sh`: Metadata capture script
+- `scripts/adb_bootstrap.sh`: ADB port forwarding bootstrap script
+- `client/preflight.py`: Preflight check implementation
