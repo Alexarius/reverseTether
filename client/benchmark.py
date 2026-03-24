@@ -45,6 +45,9 @@ class BenchmarkConfig:
     host: str = "127.0.0.1"
     port: int = 8080
 
+    # Server mode: "local" or "phone" (reverse-tethered)
+    server_mode: str = "local"
+
     # Generation settings (fixed per EXPERIMENT_PROTOCOL.md)
     temperature: float = DEFAULT_TEMPERATURE
     seed: int = DEFAULT_SEED
@@ -211,7 +214,7 @@ def write_metadata_file(config: BenchmarkConfig, output_dir: Path) -> Path:
         "backend": config.backend,
         "run_type": config.run_type,
         "prompt_tier": config.prompt_tier,
-        "server_mode": "local",
+        "server_mode": config.server_mode,
         "host": config.host,
         "port": config.port,
         "model_name": config.model_name,
@@ -295,7 +298,7 @@ def run_benchmark(
         repetition_index=repetition_index,
         node=config.node,
         backend=config.backend,
-        server_mode="local",
+        server_mode=config.server_mode,
         model_name=config.model_name,
         quantization=config.quantization,
         context_length=DEFAULT_CONTEXT_LENGTH,

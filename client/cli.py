@@ -101,6 +101,12 @@ Prerequisites:
         help="Server port (default: 8080)"
     )
     parser.add_argument(
+        "--server-mode",
+        default="local",
+        choices=["local", "phone"],
+        help="Server mode: local or phone (reverse-tethered) (default: local)"
+    )
+    parser.add_argument(
         "--model-name",
         default="",
         help="Model name for metadata (optional)"
@@ -146,6 +152,7 @@ Prerequisites:
         prompt_tier=args.prompt_tier,
         host=args.host,
         port=args.port,
+        server_mode=args.server_mode,
         model_name=args.model_name,
     )
 
@@ -159,6 +166,7 @@ Prerequisites:
     print(f"  Backend: {config.backend}")
     print(f"  Run type: {config.run_type}")
     print(f"  Prompt tier: {config.prompt_tier}")
+    print(f"  Server mode: {config.server_mode}")
     print(f"  Server: {config.host}:{config.port}")
     print()
 

@@ -129,7 +129,7 @@ Each run record **must** contain the following fields. Records missing mandatory
 - llama.cpp commit hash (**mandatory**, full 40-character git hash),
 - llama.cpp build flags,
 - server launch arguments,
-- server mode (`local` / `reverse_tethered`),
+- server mode (`local` / `phone`),
 - accelerator mode (`cpu`, `gpu_opencl`, `npu_experimental`).
 
 ### Model/settings metadata
