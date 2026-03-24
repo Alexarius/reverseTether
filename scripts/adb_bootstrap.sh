@@ -26,14 +26,27 @@ FORWARD_PORT=8080
 EXPECTED_FORWARD="tcp:${FORWARD_PORT} tcp:${FORWARD_PORT}"
 
 # ==============================================================================
-# Check ADB availability
+# ADB Binary Resolution
 # ==============================================================================
 
-if ! command -v adb &> /dev/null; then
+# Allow override via environment variable
+if [[ -n "${ADB_BIN:-}" ]]; then
+    if ! command -v "${ADB_BIN}" &> /dev/null; then
+        echo "Error: ADB_BIN='${ADB_BIN}' not found or not executable" >&2
+        exit 1
+    fi
+elif command -v adb &> /dev/null; then
+    ADB_BIN="adb"
+elif command -v adb.exe &> /dev/null; then
+    ADB_BIN="adb.exe"
+else
     echo "Error: ADB not found in PATH" >&2
     echo "Install Android SDK platform-tools and add to PATH" >&2
+    echo "Or set ADB_BIN environment variable to the full path" >&2
     exit 1
 fi
+
+echo "Using ADB binary: ${ADB_BIN}"
 
 # ==============================================================================
 # Check device connection
@@ -41,7 +54,7 @@ fi
 
 echo "Checking ADB device connection..."
 
-DEVICE_COUNT=$(adb devices | grep -c "device$" || true)
+DEVICE_COUNT=$("${ADB_BIN}" devices | grep -c "device$" || true)
 
 if [[ "${DEVICE_COUNT}" -eq 0 ]]; then
     echo "Error: No ADB device found" >&2
@@ -56,7 +69,7 @@ fi
 
 if [[ "${DEVICE_COUNT}" -gt 1 ]]; then
     echo "Warning: Multiple ADB devices found. Using default." >&2
-    adb devices
+    "${ADB_BIN}" devices
 fi
 
 echo "  Device connected: OK"
@@ -66,7 +79,7 @@ echo "  Device connected: OK"
 # ==============================================================================
 
 # Remove any existing forward for this port to ensure clean state
-adb forward --remove tcp:${FORWARD_PORT} 2>/dev/null || true
+"${ADB_BIN}" forward --remove tcp:${FORWARD_PORT} 2>/dev/null || true
 
 # ==============================================================================
 # Set up port forwarding
@@ -74,7 +87,7 @@ adb forward --remove tcp:${FORWARD_PORT} 2>/dev/null || true
 
 echo "Setting up port forwarding tcp:${FORWARD_PORT} -> tcp:${FORWARD_PORT}..."
 
-if ! adb forward tcp:${FORWARD_PORT} tcp:${FORWARD_PORT}; then
+if ! "${ADB_BIN}" forward tcp:${FORWARD_PORT} tcp:${FORWARD_PORT}; then
     echo "Error: Failed to set up port forwarding" >&2
     exit 1
 fi
@@ -87,7 +100,7 @@ echo "  Port forwarding: OK"
 
 echo "Verifying forwarding rule..."
 
-FORWARD_LIST=$(adb forward --list)
+FORWARD_LIST=$("${ADB_BIN}" forward --list)
 
 if echo "${FORWARD_LIST}" | grep -Eq "^(\\S+[[:space:]]+)?tcp:${FORWARD_PORT}[[:space:]]+tcp:${FORWARD_PORT}$"; then
     echo "  Verification: OK"

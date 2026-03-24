@@ -130,7 +130,7 @@ class RunRecord:
 
     # Fields with defaults below
     repetition_index: int = 0
-    server_mode: str = "local"  # local, reverse_tethered
+    server_mode: str = "local"  # local, phone
 
     # Model/settings metadata
     model_name: str = ""
