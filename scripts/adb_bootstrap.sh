@@ -54,7 +54,7 @@ echo "Using ADB binary: ${ADB_BIN}"
 
 echo "Checking ADB device connection..."
 
-DEVICE_COUNT=$("${ADB_BIN}" devices | grep -c "device$" || true)
+DEVICE_COUNT=$("${ADB_BIN}" devices | tr -d '\r' | grep -c "device$" || true)
 
 if [[ "${DEVICE_COUNT}" -eq 0 ]]; then
     echo "Error: No ADB device found" >&2
@@ -100,7 +100,7 @@ echo "  Port forwarding: OK"
 
 echo "Verifying forwarding rule..."
 
-FORWARD_LIST=$("${ADB_BIN}" forward --list)
+FORWARD_LIST=$("${ADB_BIN}" forward --list | tr -d '\r')
 
 if echo "${FORWARD_LIST}" | grep -Eq "^(\\S+[[:space:]]+)?tcp:${FORWARD_PORT}[[:space:]]+tcp:${FORWARD_PORT}$"; then
     echo "  Verification: OK"
