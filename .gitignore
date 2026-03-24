@@ -1,0 +1,15 @@
+# Virtual Environments
+.venv/
+env/
+
+# Project Results / Output Data
+results/
+
+# Python Cache Files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# OS Generated Files (Windows/Mac)
+.DS_Store
+Thumbs.db
