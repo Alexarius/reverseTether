@@ -187,6 +187,45 @@ def parse_sse_line(line: str) -> Optional[dict]:
         return None
 
 
+def _coerce_token_count(value: object) -> Optional[int]:
+    """Normalize token-count values from llama.cpp metadata chunks."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
+
+
+def extract_prompt_token_count(events: list[dict]) -> Optional[int]:
+    """Extract prompt token count from recent llama.cpp SSE metadata events.
+
+    The final prompt token count may appear in slightly different metadata shapes
+    depending on the llama.cpp server build. We inspect the most recent events so
+    the benchmark is resilient to trailing stop markers or nearby metadata chunks.
+    """
+    recent_events = events[-3:]
+    for event in reversed(recent_events):
+        timings = event.get("timings")
+        if isinstance(timings, dict):
+            prompt_n = _coerce_token_count(timings.get("prompt_n"))
+            if prompt_n is not None:
+                return prompt_n
+
+        for field_name in ("prompt_tokens", "tokens_evaluated"):
+            token_count = _coerce_token_count(event.get(field_name))
+            if token_count is not None:
+                return token_count
+
+    return None
+
+
 def stream_completion(
     prompt: str,
     config: BenchmarkConfig,
@@ -495,7 +534,7 @@ def run_benchmark(
         # Prompt/output metadata
         prompt_id=prompt_id,
         prompt_tier=config.prompt_tier,
-        prompt_token_count=None,  # Filled from server response if available
+        prompt_token_count=extract_prompt_token_count(events),
         generated_token_count=timing.generated_token_count,
         stop_reason=stop_reason,
         # Timing metadata
@@ -507,10 +546,6 @@ def run_benchmark(
         decode_tps=metrics.decode_tps,
         client_overhead_ms=timing.client_overhead_ms,
     )
-
-    # Try to get prompt token count from final event
-    if events and "tokens_evaluated" in events[-1]:
-        record.prompt_token_count = events[-1]["tokens_evaluated"]
 
     if not skip_metadata:
         write_metadata_file(config, output_dir)
