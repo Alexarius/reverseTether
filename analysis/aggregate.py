@@ -1,0 +1,499 @@
+#!/usr/bin/env python3
+"""
+Aggregate benchmark results from raw JSONL logs into summary tables and plots.
+
+This script reads raw_metrics.jsonl files from results directories, computes
+p50/p95 TTFT and average Decode TPS grouped by condition, and outputs derived
+tables (.csv, .md) and plots (.png) to a summaries directory.
+
+Traceability: All derived outputs reference source run directories.
+Failed runs are counted but excluded from performance math.
+No silent filtering: Any excluded data is logged explicitly.
+No metric redefinition: TTFT and Decode TPS semantics are unchanged.
+"""
+
+import argparse
+import json
+import logging
+import re
+import sys
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+import matplotlib.pyplot as plt
+import pandas as pd
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
+
+# Expected folder naming pattern: YYYYMMDD_HHMMSS_node_backend_runtype
+RUN_DIR_PATTERN = re.compile(
+    r"^(\d{8}_\d{6})_([a-zA-Z0-9]+)_([a-zA-Z0-9]+)_([a-zA-Z]+)$"
+)
+
+
+def parse_run_directory_name(dirname: str) -> dict[str, str] | None:
+    """Parse the run directory name to extract metadata."""
+    match = RUN_DIR_PATTERN.match(dirname)
+    if not match:
+        return None
+    ts_str, node, backend, run_type = match.groups()
+    return {
+        "dir_timestamp": ts_str,
+        "dir_node": node,
+        "dir_backend": backend,
+        "dir_run_type": run_type,
+    }
+
+
+def load_jsonl(path: Path) -> list[dict[str, Any]]:
+    """Load all JSON lines from a file."""
+    records = []
+    with open(path, "r", encoding="utf-8") as f:
+        for lineno, line in enumerate(f, start=1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError as e:
+                logger.warning(
+                    "Skipping malformed JSON at %s:%d: %s", path, lineno, e
+                )
+    return records
+
+
+def load_metadata(path: Path) -> dict[str, Any]:
+    """Load metadata.json from a run directory."""
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def collect_runs(input_dir: Path) -> pd.DataFrame:
+    """
+    Collect all valid benchmark runs from the input directory.
+
+    Returns a DataFrame with one row per benchmark record, annotated with
+    the source directory for traceability.
+    """
+    all_records = []
+    excluded_dirs = []
+
+    for subdir in sorted(input_dir.iterdir()):
+        if not subdir.is_dir():
+            continue
+        if subdir.name.startswith("."):
+            continue
+
+        # Parse directory name
+        dir_meta = parse_run_directory_name(subdir.name)
+        if dir_meta is None:
+            logger.info(
+                "Skipping directory with non-standard name: %s", subdir.name
+            )
+            excluded_dirs.append((subdir.name, "non-standard naming"))
+            continue
+
+        # Check for required files
+        raw_metrics_path = subdir / "raw_metrics.jsonl"
+        metadata_path = subdir / "metadata.json"
+
+        if not raw_metrics_path.exists():
+            logger.info(
+                "Skipping directory without raw_metrics.jsonl: %s", subdir.name
+            )
+            excluded_dirs.append((subdir.name, "missing raw_metrics.jsonl"))
+            continue
+
+        if not metadata_path.exists():
+            logger.info(
+                "Skipping directory without metadata.json: %s", subdir.name
+            )
+            excluded_dirs.append((subdir.name, "missing metadata.json"))
+            continue
+
+        # Load records
+        records = load_jsonl(raw_metrics_path)
+        if not records:
+            logger.info(
+                "Skipping directory with empty raw_metrics.jsonl: %s",
+                subdir.name,
+            )
+            excluded_dirs.append((subdir.name, "empty raw_metrics.jsonl"))
+            continue
+
+        # Annotate records with source directory for traceability
+        for rec in records:
+            rec["source_dir"] = subdir.name
+            rec.update(dir_meta)
+
+        all_records.extend(records)
+        logger.info(
+            "Loaded %d records from %s", len(records), subdir.name
+        )
+
+    # Log all exclusions for auditability
+    if excluded_dirs:
+        logger.info("Excluded directories summary:")
+        for dirname, reason in excluded_dirs:
+            logger.info("  - %s: %s", dirname, reason)
+
+    if not all_records:
+        logger.warning("No valid benchmark records found in %s", input_dir)
+        return pd.DataFrame()
+
+    return pd.DataFrame(all_records)
+
+
+def validate_required_columns(df: pd.DataFrame) -> bool:
+    """Check that required columns exist for aggregation."""
+    required = [
+        "run_id",
+        "benchmark_condition_id",
+        "regime",
+        "prompt_tier",
+        "stop_reason",
+        "ttft_ms",
+        "decode_tps",
+    ]
+    missing = [col for col in required if col not in df.columns]
+    if missing:
+        logger.error("Missing required columns: %s", missing)
+        return False
+    return True
+
+
+def exclude_invalid_records(
+    df: pd.DataFrame, required_value_cols: list[str]
+) -> pd.DataFrame:
+    """
+    Exclude records missing required values and log each exclusion explicitly.
+
+    This prevents pandas groupby from silently dropping rows with null group keys.
+    """
+    missing_required_mask = df[required_value_cols].isna().any(axis=1)
+    if not missing_required_mask.any():
+        return df
+
+    excluded = df.loc[missing_required_mask, ["run_id", "source_dir"] + required_value_cols]
+    logger.warning(
+        "Excluding %d records missing required values for aggregation.",
+        len(excluded),
+    )
+    for _, row in excluded.iterrows():
+        missing_cols = [
+            col for col in required_value_cols if pd.isna(row[col])
+        ]
+        logger.warning(
+            "Excluded run_id=%s from %s due to missing values in: %s",
+            row.get("run_id", "<missing>"),
+            row.get("source_dir", "<unknown>"),
+            ", ".join(missing_cols),
+        )
+
+    return df.loc[~missing_required_mask].copy()
+
+
+def compute_aggregates(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compute aggregated metrics grouped by condition.
+
+    Groups by: benchmark_condition_id, regime, prompt_tier
+    Computes for each group:
+      - Sample count
+      - Failure count
+      - Error rate
+      - TTFT p50 (median)
+      - TTFT p95
+      - Decode TPS mean
+      - Source directories (for traceability)
+
+    Failed runs are retained in counts but excluded from performance math.
+    """
+    if df.empty:
+        return pd.DataFrame()
+
+    group_keys = ["benchmark_condition_id", "regime", "prompt_tier"]
+    df = exclude_invalid_records(
+        df,
+        required_value_cols=["benchmark_condition_id", "regime", "prompt_tier", "stop_reason", "ttft_ms"],
+    )
+    if df.empty:
+        logger.warning("No valid records remain after excluding invalid rows.")
+        return pd.DataFrame()
+
+    df = df.copy()
+    df["is_failure"] = (df["stop_reason"] == "error") | (df["ttft_ms"] == 0.0)
+
+    failure_count = int(df["is_failure"].sum())
+    if failure_count:
+        logger.info(
+            "Flagged %d failed runs; excluded them from TTFT/TPS math while retaining them in failure counts.",
+            failure_count,
+        )
+
+    counts = df.groupby(group_keys, as_index=False).agg(
+        sample_count=("run_id", "size"),
+        failure_count=("is_failure", "sum"),
+    )
+    counts["error_rate"] = counts["failure_count"] / counts["sample_count"]
+
+    perf_df = df.loc[~df["is_failure"]]
+    if perf_df.empty:
+        metrics = pd.DataFrame(
+            columns=group_keys
+            + ["ttft_p50_ms", "ttft_p95_ms", "decode_tps_mean", "source_dirs"]
+        )
+    else:
+        metrics = perf_df.groupby(group_keys, as_index=False).agg(
+            ttft_p50_ms=("ttft_ms", lambda s: s.quantile(0.50)),
+            ttft_p95_ms=("ttft_ms", lambda s: s.quantile(0.95)),
+            decode_tps_mean=("decode_tps", "mean"),
+            source_dirs=("source_dir", lambda s: ", ".join(sorted(set(s)))),
+        )
+
+    return counts.merge(metrics, on=group_keys, how="left")
+
+
+def generate_markdown_table(df: pd.DataFrame) -> str:
+    """Generate a Markdown-formatted table from a DataFrame."""
+    if df.empty:
+        return "*No data available.*\n"
+
+    # Format numeric columns
+    df_display = df.copy()
+    for col in ["ttft_p50_ms", "ttft_p95_ms"]:
+        if col in df_display.columns:
+            df_display[col] = df_display[col].apply(
+                lambda x: "" if pd.isna(x) else f"{x:.2f}"
+            )
+    for col in ["decode_tps_mean", "error_rate"]:
+        if col in df_display.columns:
+            df_display[col] = df_display[col].apply(
+                lambda x: "" if pd.isna(x) else f"{x:.2f}"
+            )
+
+    # Build markdown table manually (avoiding tabulate dependency)
+    cols = df_display.columns.tolist()
+    lines = []
+
+    # Header row
+    lines.append("| " + " | ".join(cols) + " |")
+
+    # Separator row
+    lines.append("| " + " | ".join(["---"] * len(cols)) + " |")
+
+    # Data rows
+    for _, row in df_display.iterrows():
+        row_values = [str(row[col]) for col in cols]
+        lines.append("| " + " | ".join(row_values) + " |")
+
+    return "\n".join(lines)
+
+
+def plot_ttft_comparison(df: pd.DataFrame, output_path: Path) -> None:
+    """
+    Create a bar chart comparing TTFT p50 across conditions.
+    """
+    if df.empty:
+        logger.warning("No data to plot for TTFT comparison.")
+        return
+
+    # Create condition labels
+    df = df.loc[df["ttft_p50_ms"].notna()].copy()
+    if df.empty:
+        logger.warning("No successful TTFT data to plot.")
+        return
+    df["condition"] = (
+        df["benchmark_condition_id"] + "_" + df["regime"] + "_" + df["prompt_tier"]
+    )
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    bars = ax.bar(df["condition"], df["ttft_p50_ms"], color="steelblue", edgecolor="black")
+
+    ax.set_xlabel("Condition (benchmark_condition_id_regime_prompt_tier)")
+    ax.set_ylabel("TTFT p50 (ms)")
+    ax.set_title("Time to First Token (p50) by Condition")
+    ax.tick_params(axis="x", rotation=45)
+
+    # Add value labels on bars
+    for bar, val in zip(bars, df["ttft_p50_ms"]):
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() + 5,
+            f"{val:.1f}",
+            ha="center",
+            va="bottom",
+            fontsize=8,
+        )
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150)
+    plt.close()
+    logger.info("Saved TTFT comparison plot to %s", output_path)
+
+
+def plot_decode_tps_comparison(df: pd.DataFrame, output_path: Path) -> None:
+    """
+    Create a bar chart comparing Decode TPS (mean) across conditions.
+    """
+    if df.empty:
+        logger.warning("No data to plot for Decode TPS comparison.")
+        return
+
+    df = df.loc[df["decode_tps_mean"].notna()].copy()
+    if df.empty:
+        logger.warning("No successful Decode TPS data to plot.")
+        return
+    df["condition"] = (
+        df["benchmark_condition_id"] + "_" + df["regime"] + "_" + df["prompt_tier"]
+    )
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    bars = ax.bar(df["condition"], df["decode_tps_mean"], color="darkorange", edgecolor="black")
+
+    ax.set_xlabel("Condition (benchmark_condition_id_regime_prompt_tier)")
+    ax.set_ylabel("Decode TPS (mean)")
+    ax.set_title("Decode Throughput (mean) by Condition")
+    ax.tick_params(axis="x", rotation=45)
+
+    for bar, val in zip(bars, df["decode_tps_mean"]):
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() + 0.5,
+            f"{val:.1f}",
+            ha="center",
+            va="bottom",
+            fontsize=8,
+        )
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150)
+    plt.close()
+    logger.info("Saved Decode TPS comparison plot to %s", output_path)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Aggregate benchmark results into summary tables and plots.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Example:
+  python analysis/aggregate.py --input results/ --output results/summaries/
+
+Manual Cross-Check:
+  After running, verify derived metrics by manually inspecting a subset of
+  raw_metrics.jsonl entries and computing p50/p95 TTFT and mean Decode TPS.
+""",
+    )
+    parser.add_argument(
+        "--input",
+        type=Path,
+        required=True,
+        help="Input directory containing run folders (e.g., results/)",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        required=True,
+        help="Output directory for summaries (e.g., results/summaries/)",
+    )
+    args = parser.parse_args()
+
+    input_dir = args.input.resolve()
+    output_dir = args.output.resolve()
+
+    if not input_dir.exists():
+        logger.error("Input directory does not exist: %s", input_dir)
+        return 1
+
+    # Create output directory
+    output_dir.mkdir(parents=True, exist_ok=True)
+    logger.info("Output directory: %s", output_dir)
+
+    # Collect all runs
+    logger.info("Collecting benchmark runs from %s", input_dir)
+    df = collect_runs(input_dir)
+
+    if df.empty:
+        logger.error("No valid records found. Exiting.")
+        return 1
+
+    logger.info("Collected %d total records", len(df))
+
+    # Validate required columns
+    if not validate_required_columns(df):
+        return 1
+
+    # Compute aggregates
+    logger.info("Computing aggregated metrics...")
+    agg_df = compute_aggregates(df)
+
+    if agg_df.empty:
+        logger.error("Aggregation produced no results. Exiting.")
+        return 1
+
+    logger.info("Computed aggregates for %d conditions", len(agg_df))
+
+    # Generate timestamp for output files
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # Save CSV
+    csv_path = output_dir / f"summary_{ts}.csv"
+    agg_df.to_csv(csv_path, index=False)
+    logger.info("Saved summary CSV to %s", csv_path)
+
+    # Save Markdown table
+    md_path = output_dir / f"summary_{ts}.md"
+    md_content = f"""# Benchmark Summary
+
+Generated: {datetime.now().isoformat()}
+
+## Aggregated Metrics
+
+{generate_markdown_table(agg_df)}
+
+## Notes
+
+- **TTFT p50/p95**: Time to first token in milliseconds (measured at laptop boundary).
+- **Decode TPS mean**: Average tokens per second during decode phase.
+- **failure_count / error_rate**: Failed runs retained for auditability and excluded from performance math.
+- **source_dirs**: Original run directories for traceability.
+
+## Cross-Check Instructions
+
+To verify these derived metrics:
+
+1. Select a specific condition from the table above.
+2. Identify the source_dirs for that condition.
+3. Extract raw records from those directories:
+   ```powershell
+   Select-String -Path "results\\<source_dir>\\raw_metrics.jsonl" -Pattern '"prompt_tier": "<tier>"'
+   ```
+4. Manually compute p50/p95 TTFT and mean Decode TPS.
+5. Compare against the values in this table.
+"""
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write(md_content)
+    logger.info("Saved summary Markdown to %s", md_path)
+
+    # Generate plots
+    plot_ttft_comparison(agg_df, output_dir / f"ttft_comparison_{ts}.png")
+    plot_decode_tps_comparison(agg_df, output_dir / f"decode_tps_comparison_{ts}.png")
+
+    # Also save raw data export for detailed analysis
+    raw_export_path = output_dir / f"raw_export_{ts}.csv"
+    df.to_csv(raw_export_path, index=False)
+    logger.info("Saved raw data export to %s", raw_export_path)
+
+    logger.info("Aggregation complete.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
