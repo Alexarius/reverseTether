@@ -20,6 +20,7 @@ class TimingData:
     first_token_ts: Optional[float] = None  # time.perf_counter() when first token received
     final_token_ts: Optional[float] = None  # time.perf_counter() when final token received
     generated_token_count: int = 0
+    client_overhead_ms: float = 0.0  # Client-side processing time outside blocking waits
     request_sent_wallclock: Optional[datetime] = None  # datetime when request was sent
     first_token_wallclock: Optional[datetime] = None  # datetime when first token received
     final_token_wallclock: Optional[datetime] = None  # datetime when final token received
@@ -155,6 +156,7 @@ class RunRecord:
     # Computed metrics
     ttft_ms: Optional[float] = None
     decode_tps: Optional[float] = None
+    client_overhead_ms: float = 0.0
 
     # Optional metadata
     notes: str = ""

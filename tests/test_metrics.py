@@ -88,6 +88,14 @@ class TestDecodeTpsComputation(unittest.TestCase):
         tps = compute_decode_tps(first_token, final_token, generated_tokens)
         self.assertIsNone(tps)
 
+    def test_decode_tps_negative_duration(self):
+        """Decode TPS is None when decode window is negative (clock anomaly)."""
+        first_token = 5.0
+        final_token = 4.9  # Clock went backwards (should not happen, but defensive)
+        generated_tokens = 10
+        tps = compute_decode_tps(first_token, final_token, generated_tokens)
+        self.assertIsNone(tps)
+
 
 class TestComputeMetrics(unittest.TestCase):
     """Tests for the compute_metrics helper function."""
@@ -151,6 +159,7 @@ class TestRunRecord(unittest.TestCase):
         self.assertEqual(record.temperature, 0.0)
         self.assertEqual(record.max_new_tokens, 512)
         self.assertEqual(record.server_mode, "local")
+        self.assertEqual(record.client_overhead_ms, 0.0)
 
     def test_run_record_metrics_optional(self):
         """Metrics fields can be None initially."""
@@ -165,6 +174,20 @@ class TestRunRecord(unittest.TestCase):
         self.assertIsNone(record.ttft_ms)
         self.assertIsNone(record.decode_tps)
         self.assertIsNone(record.prompt_token_count)
+        self.assertEqual(record.client_overhead_ms, 0.0)
+
+    def test_run_record_preserves_client_overhead_ms(self):
+        """RunRecord explicitly stores client_overhead_ms for raw log output."""
+        record = RunRecord(
+            timestamp="2024-01-01T00:00:00",
+            run_id="test-123",
+            regime="warm",
+            node="yoga",
+            backend="cpu",
+            client_overhead_ms=7.25,
+        )
+
+        self.assertEqual(record.client_overhead_ms, 7.25)
 
 
 class TestMetricIntegrity(unittest.TestCase):

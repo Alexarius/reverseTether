@@ -126,6 +126,7 @@ def stream_completion(
     Raises:
         requests.RequestException: If the request fails
     """
+    setup_start = time.perf_counter()
     url = f"http://{config.host}:{config.port}/completion"
     payload = build_completion_payload(prompt, config)
 
@@ -133,6 +134,7 @@ def stream_completion(
     events = []
     stop_reason = ""
     token_count = 0
+    client_overhead_seconds = time.perf_counter() - setup_start
 
     # Start timer immediately before request
     timing.request_sent_wallclock = datetime.now()
@@ -147,22 +149,29 @@ def stream_completion(
         timeout=timeout,
         headers={"Accept": "text/event-stream"}
     )
+    status_check_start = time.perf_counter()
     response.raise_for_status()
+    client_overhead_seconds += time.perf_counter() - status_check_start
 
     # Process SSE stream line by line
-    for line in response.iter_lines(decode_unicode=True):
+    line_iterator = response.iter_lines(decode_unicode=True)
+    for line in line_iterator:
+        process_start = time.perf_counter()
+
         if not line:
+            client_overhead_seconds += time.perf_counter() - process_start
             continue
 
         data = parse_sse_line(line)
         if data is None:
+            client_overhead_seconds += time.perf_counter() - process_start
             continue
 
         events.append(data)
 
-        # Check for content token
-        content = data.get("content", "")
-        if content:
+        # TTFT starts only on a real generated token, not on empty or non-string chunks.
+        content = data.get("content")
+        if isinstance(content, str) and len(content) > 0:
             token_count += 1
             now = time.perf_counter()
             now_wallclock = datetime.now()
@@ -182,9 +191,15 @@ def stream_completion(
             # Use server-reported token count if available
             if "tokens_predicted" in data:
                 token_count = data["tokens_predicted"]
+            client_overhead_seconds += time.perf_counter() - process_start
             break
 
+        client_overhead_seconds += time.perf_counter() - process_start
+
+    finalize_start = time.perf_counter()
     timing.generated_token_count = token_count
+    client_overhead_seconds += time.perf_counter() - finalize_start
+    timing.client_overhead_ms = client_overhead_seconds * 1000.0
     return timing, events, stop_reason
 
 
@@ -315,6 +330,7 @@ def run_benchmark(
         final_token_timestamp=final_token_wallclock,
         ttft_ms=metrics.ttft_ms,
         decode_tps=metrics.decode_tps,
+        client_overhead_ms=timing.client_overhead_ms,
     )
 
     # Try to get prompt token count from first event
