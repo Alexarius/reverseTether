@@ -27,6 +27,9 @@ from client.benchmark import (
 )
 from client.metrics import TimingData
 
+VALID_MODEL_SHA256 = "a" * 64
+VALID_LLAMA_CPP_COMMIT = "b" * 40
+
 
 class TestBenchmarkLogging(unittest.TestCase):
     """Tests for run directory logging artifacts."""
@@ -39,6 +42,8 @@ class TestBenchmarkLogging(unittest.TestCase):
             run_type="warm",
             prompt_tier="short",
             model_name="Llama-3.2-1B-Instruct",
+            model_sha256=VALID_MODEL_SHA256,
+            llama_cpp_commit=VALID_LLAMA_CPP_COMMIT,
         )
         request_sent_wallclock = datetime(2026, 3, 22, 12, 0, 0)
         first_token_wallclock = datetime(2026, 3, 22, 12, 0, 1)
@@ -264,6 +269,8 @@ class TestStreamingEdgeCases(unittest.TestCase):
             run_type="warm",
             prompt_tier="short",
             model_name="test-model",
+            model_sha256=VALID_MODEL_SHA256,
+            llama_cpp_commit=VALID_LLAMA_CPP_COMMIT,
         )
         # Simulate stream that produces no content tokens
         timing = TimingData(
@@ -301,6 +308,8 @@ class TestStreamingEdgeCases(unittest.TestCase):
             run_type="warm",
             prompt_tier="short",
             model_name="test-model",
+            model_sha256=VALID_MODEL_SHA256,
+            llama_cpp_commit=VALID_LLAMA_CPP_COMMIT,
         )
         request_sent = datetime(2026, 3, 22, 12, 0, 0)
         first_token = datetime(2026, 3, 22, 12, 0, 1)
@@ -334,6 +343,89 @@ class TestStreamingEdgeCases(unittest.TestCase):
             # Decode TPS should be None (zero decode window)
             self.assertIsNone(record.decode_tps)
             self.assertEqual(record.generated_token_count, 1)
+
+
+class TestReproducibilityValidation(unittest.TestCase):
+    """Tests for strict reproducibility field validation."""
+
+    def test_run_benchmark_rejects_invalid_model_sha256(self):
+        """Non-mock runs must reject model hashes that are not 64 lowercase hex chars."""
+        config = BenchmarkConfig(
+            node="yoga",
+            backend="cpu",
+            run_type="warm",
+            prompt_tier="short",
+            model_sha256="A" * 64,
+            llama_cpp_commit=VALID_LLAMA_CPP_COMMIT,
+        )
+
+        with patch("client.benchmark.create_result_directory") as create_dir_mock, patch(
+            "client.benchmark.stream_completion"
+        ) as stream_mock:
+            with self.assertRaisesRegex(ValueError, "model_sha256"):
+                run_benchmark(prompt="Test", prompt_id="short_v1", config=config)
+
+        create_dir_mock.assert_not_called()
+        stream_mock.assert_not_called()
+
+    def test_run_benchmark_rejects_invalid_llama_cpp_commit(self):
+        """Non-mock runs must reject commit hashes that are not 40 lowercase hex chars."""
+        config = BenchmarkConfig(
+            node="yoga",
+            backend="cpu",
+            run_type="warm",
+            prompt_tier="short",
+            model_sha256=VALID_MODEL_SHA256,
+            llama_cpp_commit="B" * 40,
+        )
+
+        with patch("client.benchmark.create_result_directory") as create_dir_mock, patch(
+            "client.benchmark.stream_completion"
+        ) as stream_mock:
+            with self.assertRaisesRegex(ValueError, "llama_cpp_commit"):
+                run_benchmark(prompt="Test", prompt_id="short_v1", config=config)
+
+        create_dir_mock.assert_not_called()
+        stream_mock.assert_not_called()
+
+    def test_run_benchmark_allows_mock_without_hashes(self):
+        """Mock runs may bypass strict reproducibility validation for dry-run coverage."""
+        config = BenchmarkConfig(
+            node="yoga",
+            backend="cpu",
+            run_type="warm",
+            prompt_tier="short",
+            mock=True,
+        )
+        timing = TimingData(
+            request_sent_ts=10.0,
+            first_token_ts=10.5,
+            final_token_ts=12.0,
+            generated_token_count=4,
+            client_overhead_ms=3.5,
+            request_sent_wallclock=datetime(2026, 3, 22, 12, 0, 0),
+            first_token_wallclock=datetime(2026, 3, 22, 12, 0, 1),
+            final_token_wallclock=datetime(2026, 3, 22, 12, 0, 2),
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+
+            with patch(
+                "client.benchmark.generate_mock_timing",
+                return_value=(timing, [{"tokens_evaluated": 7}], "eos"),
+            ), patch("client.benchmark.uuid.uuid4", return_value="test-run-id"):
+                record = run_benchmark(
+                    prompt="Test prompt",
+                    prompt_id="short_v1",
+                    config=config,
+                    output_dir=output_dir,
+                )
+
+            self.assertEqual(record.generated_token_count, 4)
+            self.assertEqual(record.prompt_token_count, 7)
+            self.assertTrue((output_dir / "metadata.json").exists())
+            self.assertTrue((output_dir / "raw_metrics.jsonl").exists())
 
 
 if __name__ == "__main__":

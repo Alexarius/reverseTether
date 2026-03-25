@@ -4,7 +4,7 @@
   "title": "Phone Server Metadata",
   "description": "Schema for capturing phone-side llama.cpp server metadata for benchmark reproducibility",
   "type": "object",
-  "required": ["schema_version", "capture_timestamp", "llama_cpp", "device"],
+  "required": ["schema_version", "capture_timestamp", "llama_cpp", "device", "model"],
   "properties": {
     "schema_version": {
       "type": "string",
@@ -27,7 +27,8 @@
         },
         "commit_hash": {
           "type": "string",
-          "description": "Git commit SHA of llama.cpp build"
+          "description": "Full 40-character git commit SHA of llama.cpp build (MANDATORY)",
+          "pattern": "^[a-f0-9]{40}$"
         },
         "commit_date": {
           "type": "string",
@@ -36,6 +37,39 @@
         "dirty": {
           "type": ["boolean", "string"],
           "description": "Whether the build has uncommitted changes"
+        },
+        "build_flags": {
+          "type": "string",
+          "description": "CMake build flags used (e.g., '-DGGML_OPENCL=ON')"
+        }
+      }
+    },
+    "model": {
+      "type": "object",
+      "description": "Model file information (MANDATORY for reproducibility)",
+      "required": ["sha256"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Full HuggingFace-style model identifier"
+        },
+        "filename": {
+          "type": "string",
+          "description": "Exact GGUF filename"
+        },
+        "sha256": {
+          "type": "string",
+          "description": "SHA-256 hash of model file (MANDATORY, 64 hex characters)",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "parameter_count": {
+          "type": "string",
+          "description": "Model parameter count (e.g., '1B', '3B', '8B')"
+        },
+        "quantization": {
+          "type": "string",
+          "description": "Quantization format (must be Q4_0 for core comparisons)",
+          "enum": ["Q4_0", "Q4_1", "Q5_0", "Q5_1", "Q8_0"]
         }
       }
     },
@@ -150,7 +184,7 @@
     },
     "server_config": {
       "type": "object",
-      "description": "Server launch configuration (optional, can be added manually)",
+      "description": "Server launch configuration",
       "properties": {
         "model_path": {
           "type": "string",
@@ -158,7 +192,7 @@
         },
         "context_length": {
           "type": "integer",
-          "description": "Context length (-c flag)"
+          "description": "Context length (-c flag), must be 2048 for core benchmarks"
         },
         "gpu_layers": {
           "type": "integer",
@@ -174,8 +208,12 @@
         },
         "backend": {
           "type": "string",
-          "enum": ["cpu", "gpu_opencl", "npu_experimental"],
+          "enum": ["cpu", "opencl", "npu_experimental"],
           "description": "Accelerator backend used"
+        },
+        "launch_args": {
+          "type": "string",
+          "description": "Full server launch command arguments"
         }
       }
     }
