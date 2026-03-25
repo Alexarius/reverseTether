@@ -22,10 +22,11 @@ from client.benchmark import (
     BenchmarkConfig,
     MatrixConfig,
     MatrixRunResult,
+    build_completion_payload,
+    extract_prompt_token_count,
+    parse_sse_line,
     run_benchmark,
     run_matrix,
-    parse_sse_line,
-    build_completion_payload,
     stream_completion,
 )
 from client.metrics import TimingData
@@ -348,6 +349,57 @@ class TestStreamingEdgeCases(unittest.TestCase):
             self.assertEqual(record.generated_token_count, 1)
 
 
+class TestPromptTokenCountExtraction(unittest.TestCase):
+    """Tests for robust prompt token extraction from llama.cpp metadata."""
+
+    def test_extract_prompt_token_count_from_tokens_evaluated(self):
+        """Should extract prompt token count from tokens_evaluated."""
+        events = [
+            {"content": "hello", "stop": False},
+            {"stop": True, "tokens_evaluated": 142},
+        ]
+
+        self.assertEqual(extract_prompt_token_count(events), 142)
+
+    def test_extract_prompt_token_count_from_prompt_tokens(self):
+        """Should extract prompt token count from prompt_tokens."""
+        events = [
+            {"content": "hello", "stop": False},
+            {"stop": True, "prompt_tokens": 87},
+        ]
+
+        self.assertEqual(extract_prompt_token_count(events), 87)
+
+    def test_extract_prompt_token_count_from_nested_timings_prompt_n(self):
+        """Should extract prompt token count from timings.prompt_n."""
+        events = [
+            {"content": "hello", "stop": False},
+            {"stop": True, "timings": {"prompt_n": 65}},
+        ]
+
+        self.assertEqual(extract_prompt_token_count(events), 65)
+
+    def test_extract_prompt_token_count_checks_recent_events(self):
+        """Should find metadata in a recent event even if the final event lacks it."""
+        events = [
+            {"content": "older", "tokens_evaluated": 10},
+            {"content": "token", "stop": False},
+            {"timings": {"prompt_n": 99}},
+            {"stop": True, "stop_type": "eos"},
+        ]
+
+        self.assertEqual(extract_prompt_token_count(events), 99)
+
+    def test_extract_prompt_token_count_returns_none_when_missing(self):
+        """Should return None when prompt token metadata is unavailable."""
+        events = [
+            {"content": "hello", "stop": False},
+            {"stop": True, "tokens_predicted": 12},
+        ]
+
+        self.assertIsNone(extract_prompt_token_count(events))
+
+
 class TestReproducibilityValidation(unittest.TestCase):
     """Tests for strict reproducibility field validation."""
 
@@ -429,6 +481,272 @@ class TestReproducibilityValidation(unittest.TestCase):
             self.assertEqual(record.prompt_token_count, 7)
             self.assertTrue((output_dir / "metadata.json").exists())
             self.assertTrue((output_dir / "raw_metrics.jsonl").exists())
+
+
+class TestPromptMetadataInJSONL(unittest.TestCase):
+    """Tests for prompt metadata in JSONL records.
+
+    Per Issue 09 requirements:
+    - prompt_id must be logged in every record for reproducibility
+    - prompt_token_count must be captured from server response (not guessed)
+    - These fields enable tracking prompt drift and token count accuracy
+    """
+
+    def test_jsonl_contains_prompt_id(self):
+        """Each JSONL record must contain the prompt_id field."""
+        config = BenchmarkConfig(
+            node="yoga",
+            backend="cpu",
+            run_type="warm",
+            prompt_tier="short",
+            model_sha256=VALID_MODEL_SHA256,
+            llama_cpp_commit=VALID_LLAMA_CPP_COMMIT,
+        )
+        timing = TimingData(
+            request_sent_ts=10.0,
+            first_token_ts=11.0,
+            final_token_ts=13.0,
+            generated_token_count=5,
+            client_overhead_ms=2.0,
+            request_sent_wallclock=datetime(2026, 3, 25, 12, 0, 0),
+            first_token_wallclock=datetime(2026, 3, 25, 12, 0, 1),
+            final_token_wallclock=datetime(2026, 3, 25, 12, 0, 3),
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+
+            with patch(
+                "client.benchmark.stream_completion",
+                return_value=(timing, [{"tokens_evaluated": 25}], "eos"),
+            ), patch("client.benchmark.uuid.uuid4", return_value="test-run-id"):
+                run_benchmark(
+                    prompt="Test prompt",
+                    prompt_id="short_v1",
+                    config=config,
+                    output_dir=output_dir,
+                )
+
+            metrics_file = output_dir / "raw_metrics.jsonl"
+            record = json.loads(metrics_file.read_text(encoding="utf-8").strip())
+
+            self.assertIn("prompt_id", record)
+            self.assertEqual(record["prompt_id"], "short_v1")
+
+    def test_jsonl_contains_prompt_token_count_from_server(self):
+        """prompt_token_count must come from server metadata, not guessed."""
+        config = BenchmarkConfig(
+            node="yoga",
+            backend="cpu",
+            run_type="warm",
+            prompt_tier="medium",
+            model_sha256=VALID_MODEL_SHA256,
+            llama_cpp_commit=VALID_LLAMA_CPP_COMMIT,
+        )
+        timing = TimingData(
+            request_sent_ts=10.0,
+            first_token_ts=11.0,
+            final_token_ts=13.0,
+            generated_token_count=50,
+            client_overhead_ms=2.0,
+            request_sent_wallclock=datetime(2026, 3, 25, 12, 0, 0),
+            first_token_wallclock=datetime(2026, 3, 25, 12, 0, 1),
+            final_token_wallclock=datetime(2026, 3, 25, 12, 0, 3),
+        )
+        # Server reports 142 prompt tokens via a supported metadata field.
+        events = [{"prompt_tokens": 142, "stop": True}]
+
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+
+            with patch(
+                "client.benchmark.stream_completion",
+                return_value=(timing, events, "eos"),
+            ), patch("client.benchmark.uuid.uuid4", return_value="test-run-id"):
+                run_benchmark(
+                    prompt="Test prompt",
+                    prompt_id="medium_v1",
+                    config=config,
+                    output_dir=output_dir,
+                )
+
+            metrics_file = output_dir / "raw_metrics.jsonl"
+            record = json.loads(metrics_file.read_text(encoding="utf-8").strip())
+
+            self.assertIn("prompt_token_count", record)
+            self.assertEqual(record["prompt_token_count"], 142)
+
+    def test_jsonl_contains_prompt_token_count_from_nested_timings(self):
+        """run_benchmark should use the helper for timings.prompt_n metadata."""
+        config = BenchmarkConfig(
+            node="yoga",
+            backend="cpu",
+            run_type="warm",
+            prompt_tier="medium",
+            model_sha256=VALID_MODEL_SHA256,
+            llama_cpp_commit=VALID_LLAMA_CPP_COMMIT,
+        )
+        timing = TimingData(
+            request_sent_ts=10.0,
+            first_token_ts=11.0,
+            final_token_ts=13.0,
+            generated_token_count=50,
+            client_overhead_ms=2.0,
+            request_sent_wallclock=datetime(2026, 3, 25, 12, 0, 0),
+            first_token_wallclock=datetime(2026, 3, 25, 12, 0, 1),
+            final_token_wallclock=datetime(2026, 3, 25, 12, 0, 3),
+        )
+        events = [
+            {"content": "partial", "stop": False},
+            {"timings": {"prompt_n": 91}},
+            {"stop": True, "stop_type": "eos"},
+        ]
+
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+
+            with patch(
+                "client.benchmark.stream_completion",
+                return_value=(timing, events, "eos"),
+            ), patch("client.benchmark.uuid.uuid4", return_value="test-run-id"):
+                run_benchmark(
+                    prompt="Test prompt",
+                    prompt_id="medium_v1",
+                    config=config,
+                    output_dir=output_dir,
+                )
+
+            metrics_file = output_dir / "raw_metrics.jsonl"
+            record = json.loads(metrics_file.read_text(encoding="utf-8").strip())
+
+            self.assertIn("prompt_token_count", record)
+            self.assertEqual(record["prompt_token_count"], 91)
+
+    def test_jsonl_prompt_token_count_null_when_not_reported(self):
+        """prompt_token_count should be null if server doesn't report it."""
+        config = BenchmarkConfig(
+            node="yoga",
+            backend="cpu",
+            run_type="warm",
+            prompt_tier="short",
+            model_sha256=VALID_MODEL_SHA256,
+            llama_cpp_commit=VALID_LLAMA_CPP_COMMIT,
+        )
+        timing = TimingData(
+            request_sent_ts=10.0,
+            first_token_ts=11.0,
+            final_token_ts=13.0,
+            generated_token_count=5,
+            client_overhead_ms=2.0,
+            request_sent_wallclock=datetime(2026, 3, 25, 12, 0, 0),
+            first_token_wallclock=datetime(2026, 3, 25, 12, 0, 1),
+            final_token_wallclock=datetime(2026, 3, 25, 12, 0, 3),
+        )
+        # Server response without tokens_evaluated
+        events = [{"stop": True}]
+
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+
+            with patch(
+                "client.benchmark.stream_completion",
+                return_value=(timing, events, "eos"),
+            ), patch("client.benchmark.uuid.uuid4", return_value="test-run-id"):
+                run_benchmark(
+                    prompt="Test prompt",
+                    prompt_id="short_v1",
+                    config=config,
+                    output_dir=output_dir,
+                )
+
+            metrics_file = output_dir / "raw_metrics.jsonl"
+            record = json.loads(metrics_file.read_text(encoding="utf-8").strip())
+
+            # Field should exist but be null
+            self.assertIn("prompt_token_count", record)
+            self.assertIsNone(record["prompt_token_count"])
+
+    def test_jsonl_prompt_tier_matches_config(self):
+        """prompt_tier field should reflect the configured tier."""
+        config = BenchmarkConfig(
+            node="yoga",
+            backend="cpu",
+            run_type="soak",
+            prompt_tier="soak",
+            model_sha256=VALID_MODEL_SHA256,
+            llama_cpp_commit=VALID_LLAMA_CPP_COMMIT,
+        )
+        timing = TimingData(
+            request_sent_ts=10.0,
+            first_token_ts=11.0,
+            final_token_ts=13.0,
+            generated_token_count=5,
+            client_overhead_ms=2.0,
+            request_sent_wallclock=datetime(2026, 3, 25, 12, 0, 0),
+            first_token_wallclock=datetime(2026, 3, 25, 12, 0, 1),
+            final_token_wallclock=datetime(2026, 3, 25, 12, 0, 3),
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+
+            with patch(
+                "client.benchmark.stream_completion",
+                return_value=(timing, [{"tokens_evaluated": 100}], "eos"),
+            ), patch("client.benchmark.uuid.uuid4", return_value="test-run-id"):
+                run_benchmark(
+                    prompt="Soak test prompt",
+                    prompt_id="soak_v1",
+                    config=config,
+                    output_dir=output_dir,
+                )
+
+            metrics_file = output_dir / "raw_metrics.jsonl"
+            record = json.loads(metrics_file.read_text(encoding="utf-8").strip())
+
+            self.assertIn("prompt_tier", record)
+            self.assertEqual(record["prompt_tier"], "soak")
+
+    def test_matrix_jsonl_all_records_have_prompt_metadata(self):
+        """All matrix run records must include prompt_id and prompt_token_count."""
+        base_config = BenchmarkConfig(
+            node="yoga",
+            backend="cpu",
+            run_type="warm",
+            prompt_tier="short",
+            mock=True,
+        )
+        matrix_config = MatrixConfig(
+            regimes=["warm", "soak"],
+            repetitions=2,
+            prompt_tier="short",
+            dry_run=False,
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+
+            run_matrix(
+                prompt="Test prompt",
+                prompt_id="short_v1",
+                base_config=base_config,
+                matrix_config=matrix_config,
+                output_dir=output_dir,
+            )
+
+            metrics_file = output_dir / "raw_metrics.jsonl"
+            lines = metrics_file.read_text(encoding="utf-8").strip().split("\n")
+
+            # All 4 records (2 regimes * 2 reps) must have prompt metadata
+            self.assertEqual(len(lines), 4)
+
+            for line in lines:
+                record = json.loads(line)
+                self.assertIn("prompt_id", record)
+                self.assertIn("prompt_token_count", record)
+                self.assertIn("prompt_tier", record)
+                # prompt_id should match what was passed
+                self.assertEqual(record["prompt_id"], "short_v1")
 
 
 class TestMatrixRunner(unittest.TestCase):

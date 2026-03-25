@@ -86,11 +86,40 @@ These fields are required for valid benchmark comparisons per DECISION_LOG.md DL
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `prompt_id` | string | Identifier for the prompt |
+| `prompt_id` | string | Versioned identifier for the prompt (e.g., `short_v1`) |
 | `prompt_tier` | string | `short`, `medium`, `long`, or `soak` |
-| `prompt_token_count` | integer \| null | Prompt tokens (from server) |
+| `prompt_token_count` | integer \| null | Prompt tokens from server's `tokens_evaluated` |
 | `generated_token_count` | integer | Number of tokens generated |
 | `stop_reason` | string | Why generation stopped |
+
+#### Prompt ID Versioning (Issue 09)
+
+The `prompt_id` field uses a versioned format: `<tier>_v<N>` (e.g., `short_v1`, `medium_v2`).
+
+**Why this matters:**
+- Prevents **prompt drift** — changing prompt wording without tracking invalidates historical comparisons
+- Enables **reproducibility auditing** — every benchmark run can be traced to the exact prompt used
+- Supports **prompt evolution** — new versions can be introduced while maintaining comparison validity
+
+**Rules:**
+1. Never modify prompt text without incrementing the version number
+2. The prompt_id must match the prompt tier prefix (e.g., `short_v1` for tier `short`)
+3. All prompt definitions live in `configs/prompts/suite.json`
+
+#### Token Count Integrity (Issue 09)
+
+**Critical**: `prompt_token_count` must be recorded from the llama.cpp server response, never guessed.
+
+The client captures this from the `tokens_evaluated` field in the server's final SSE event:
+
+```json
+{"stop": true, "tokens_evaluated": 142, "tokens_predicted": 87}
+```
+
+**Why not guess?**
+- Different tokenizers produce different counts for identical text
+- Guessed counts (e.g., word splitting) break decode TPS comparability across models
+- The server knows the exact prompt tokens after parsing the full context
 
 ### Timing Metadata
 
@@ -147,7 +176,7 @@ These fields are required for valid benchmark comparisons per DECISION_LOG.md DL
   "temperature": 0.0,
   "max_new_tokens": 512,
   "stop_config": "eos_or_max_tokens",
-  "prompt_id": "short_chat_v1",
+  "prompt_id": "short_v1",
   "prompt_tier": "short",
   "prompt_token_count": 45,
   "generated_token_count": 87,
@@ -214,6 +243,38 @@ cat results/*_yoga_cpu_cold/raw_metrics.jsonl
 
 # Validate JSON format
 python -c "import json; [json.loads(line) for line in open('results/YYYYMMDD_HHMMSS_yoga_cpu_cold/raw_metrics.jsonl')]"
+```
+
+### Prompt Metadata Verification (Issue 09)
+
+To verify prompt_id and prompt_token_count are properly logged:
+
+```bash
+# Check that prompt_id and prompt_token_count exist in JSONL records
+grep -E '"prompt_id"|"prompt_token_count"' results/<latest_run_dir>/raw_metrics.jsonl
+
+# Verify prompt_id matches expected format
+python -c "
+import json
+with open('results/<run_dir>/raw_metrics.jsonl') as f:
+    for line in f:
+        record = json.loads(line)
+        assert 'prompt_id' in record, 'Missing prompt_id'
+        assert 'prompt_token_count' in record, 'Missing prompt_token_count'
+        # prompt_id should be versioned (e.g., short_v1)
+        assert '_v' in record['prompt_id'], f'Invalid prompt_id format: {record[\"prompt_id\"]}'
+        print(f'OK: prompt_id={record[\"prompt_id\"]}, prompt_token_count={record[\"prompt_token_count\"]}')
+"
+```
+
+### Unit Test Validation
+
+```bash
+# Run all tests including prompt fixture tests
+pytest tests/
+
+# Run only prompt-related tests
+pytest tests/test_cli.py -k "prompt" -v
 ```
 
 ## Schema Version History
