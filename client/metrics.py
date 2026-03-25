@@ -120,6 +120,12 @@ class RunRecord:
 
     Fields follow the logging schema in EXPERIMENT_PROTOCOL.md.
     Required fields (no defaults) must come first.
+
+    Critical reproducibility fields (mandatory per DECISION_LOG.md DL-20260322-03):
+    - model_sha256: SHA-256 hash of the exact model file used
+    - llama_cpp_commit: Full 40-character git commit hash
+    - seed: Fixed RNG seed (must be 42 for comparable runs)
+    - quantization: Must be Q4_0 for core benchmark comparisons
     """
 
     # Run identity (required)
@@ -131,15 +137,28 @@ class RunRecord:
 
     # Fields with defaults below
     repetition_index: int = 0
+    benchmark_condition_id: str = ""  # Unique identifier for the experimental condition
     server_mode: str = "local"  # local, phone
 
+    # Device/runtime metadata
+    laptop_identifier: str = ""  # e.g., "yoga_slim7_14are05"
+    phone_identifier: str = ""  # e.g., "s25ultra_sm_s938n"
+    os_build_metadata: str = ""  # OS version and build info
+    llama_cpp_commit: str = ""  # MANDATORY: Full 40-character git commit hash
+    llama_cpp_build_flags: str = ""  # CMake build flags used
+    server_launch_args: str = ""  # Actual server launch command args
+
     # Model/settings metadata
-    model_name: str = ""
-    quantization: str = "Q4_0"
+    model_name: str = ""  # Full HuggingFace-style identifier
+    model_filename: str = ""  # Exact GGUF filename
+    model_sha256: str = ""  # MANDATORY: 64 hex characters
+    parameter_count: str = ""  # e.g., "1B", "3B", "8B"
+    quantization: str = "Q4_0"  # MANDATORY: Must be Q4_0 for core comparisons
     context_length: int = 2048
-    seed: int = 42
+    seed: int = 42  # MANDATORY: Must be 42 for comparable runs
     temperature: float = 0.0
     max_new_tokens: int = 512
+    stop_config: str = "eos_or_max_tokens"  # Stopping condition description
 
     # Prompt/output metadata
     prompt_id: str = ""
@@ -158,5 +177,12 @@ class RunRecord:
     decode_tps: Optional[float] = None
     client_overhead_ms: float = 0.0
 
-    # Optional metadata
+    # Optional thermal / environment metadata
+    device_temperature_c: Optional[float] = None
+    battery_level_percent: Optional[int] = None
+    battery_status: str = ""  # Charging, Discharging, Full
+    background_apps_minimized: Optional[bool] = None
+    known_anomalies: str = ""
+
+    # Optional general notes
     notes: str = ""

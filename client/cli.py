@@ -12,7 +12,12 @@ import json
 import sys
 from pathlib import Path
 
-from .benchmark import BenchmarkConfig, run_benchmark, create_result_directory
+from .benchmark import (
+    BenchmarkConfig,
+    create_result_directory,
+    run_benchmark,
+    validate_reproducibility_fields,
+)
 
 
 def load_prompt_suite(suite_path: Path) -> dict:
@@ -57,11 +62,18 @@ Examples:
   # Warm start run with medium prompt
   python -m client.cli --node yoga --backend cpu --run-type warm --prompt-tier medium
 
+  # Mock mode for testing (no server required)
+  python -m client.cli --node yoga --backend cpu --run-type cold --prompt-tier short --mock
+
 Prerequisites:
   1. Start llama.cpp server locally:
      llama-server -m models/<model>.gguf -c 2048 --port 8080 --host 127.0.0.1 -ngl 0
 
   2. Run this benchmark harness to measure TTFT and decode TPS.
+
+Mock mode:
+  Use --mock for dry-run testing without a server. Generates synthetic timing
+  data to validate directory creation and JSONL schema.
 """
     )
 
@@ -123,6 +135,56 @@ Prerequisites:
         default=1,
         help="Number of repetitions (default: 1)"
     )
+    parser.add_argument(
+        "--mock",
+        action="store_true",
+        help="Run in mock mode (no server required, generates synthetic timing data)"
+    )
+    parser.add_argument(
+        "--model-filename",
+        default="",
+        help="Exact GGUF model filename"
+    )
+    parser.add_argument(
+        "--model-sha256",
+        default="",
+        help="SHA-256 hash of model file (64 hex chars, mandatory for real runs)"
+    )
+    parser.add_argument(
+        "--parameter-count",
+        default="",
+        help="Model parameter count (e.g., '1B', '3B', '8B')"
+    )
+    parser.add_argument(
+        "--llama-cpp-commit",
+        default="",
+        help="Full 40-character git commit hash of llama.cpp build (mandatory for real runs)"
+    )
+    parser.add_argument(
+        "--llama-cpp-build-flags",
+        default="",
+        help="CMake build flags used for llama.cpp"
+    )
+    parser.add_argument(
+        "--server-launch-args",
+        default="",
+        help="Server launch command arguments"
+    )
+    parser.add_argument(
+        "--laptop-identifier",
+        default="",
+        help="Laptop identifier (e.g., 'yoga_slim7_14are05')"
+    )
+    parser.add_argument(
+        "--phone-identifier",
+        default="",
+        help="Phone identifier (e.g., 's25ultra_sm_s938n')"
+    )
+    parser.add_argument(
+        "--os-build-metadata",
+        default="",
+        help="OS version and build information"
+    )
 
     args = parser.parse_args()
 
@@ -154,7 +216,23 @@ Prerequisites:
         port=args.port,
         server_mode=args.server_mode,
         model_name=args.model_name,
+        model_filename=args.model_filename,
+        model_sha256=args.model_sha256,
+        parameter_count=args.parameter_count,
+        llama_cpp_commit=args.llama_cpp_commit,
+        llama_cpp_build_flags=args.llama_cpp_build_flags,
+        server_launch_args=args.server_launch_args,
+        laptop_identifier=args.laptop_identifier,
+        phone_identifier=args.phone_identifier,
+        os_build_metadata=args.os_build_metadata,
+        mock=args.mock,
     )
+
+    try:
+        validate_reproducibility_fields(config)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
     # Create output directory
     output_dir = create_result_directory(config)
@@ -167,7 +245,10 @@ Prerequisites:
     print(f"  Run type: {config.run_type}")
     print(f"  Prompt tier: {config.prompt_tier}")
     print(f"  Server mode: {config.server_mode}")
-    print(f"  Server: {config.host}:{config.port}")
+    if config.mock:
+        print("  Mode: MOCK (no server connection)")
+    else:
+        print(f"  Server: {config.host}:{config.port}")
     print()
 
     for i in range(args.repetitions):

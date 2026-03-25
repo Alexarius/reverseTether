@@ -13,6 +13,7 @@ Critical timing notes (from implementation plan):
 """
 
 import json
+import re
 import time
 import uuid
 from dataclasses import dataclass, asdict
@@ -30,6 +31,8 @@ DEFAULT_TEMPERATURE = 0.0
 DEFAULT_SEED = 42
 DEFAULT_MAX_TOKENS = 512
 DEFAULT_CONTEXT_LENGTH = 2048
+MODEL_SHA256_PATTERN = re.compile(r"^[a-f0-9]{64}$")
+LLAMA_CPP_COMMIT_PATTERN = re.compile(r"^[a-f0-9]{40}$")
 
 
 @dataclass
@@ -55,7 +58,37 @@ class BenchmarkConfig:
 
     # Model metadata (filled by caller)
     model_name: str = ""
+    model_filename: str = ""
+    model_sha256: str = ""  # MANDATORY: 64 hex characters
+    parameter_count: str = ""  # e.g., "1B", "3B", "8B"
     quantization: str = "Q4_0"
+
+    # Device/runtime metadata
+    laptop_identifier: str = ""
+    phone_identifier: str = ""
+    os_build_metadata: str = ""
+    llama_cpp_commit: str = ""  # MANDATORY: Full 40-character git hash
+    llama_cpp_build_flags: str = ""
+    server_launch_args: str = ""
+
+    # Mock mode for testing
+    mock: bool = False
+
+
+def validate_reproducibility_fields(config: BenchmarkConfig) -> None:
+    """Validate mandatory reproducibility fields for real benchmark runs."""
+    if config.mock:
+        return
+
+    if not MODEL_SHA256_PATTERN.fullmatch(config.model_sha256):
+        raise ValueError(
+            "model_sha256 must be exactly 64 lowercase hex characters for non-mock runs."
+        )
+
+    if not LLAMA_CPP_COMMIT_PATTERN.fullmatch(config.llama_cpp_commit):
+        raise ValueError(
+            "llama_cpp_commit must be exactly 40 lowercase hex characters for non-mock runs."
+        )
 
 
 def build_completion_payload(prompt: str, config: BenchmarkConfig) -> dict:
@@ -75,6 +108,57 @@ def build_completion_payload(prompt: str, config: BenchmarkConfig) -> dict:
         "seed": config.seed,
         "stream": True,
     }
+
+
+def generate_mock_timing() -> tuple[TimingData, list[dict], str]:
+    """Generate mock timing data for dry-run testing.
+
+    Returns:
+        Tuple of (timing_data, raw_events, stop_reason) with realistic mock values
+    """
+    import random
+
+    # Simulate realistic timing values
+    request_sent_ts = time.perf_counter()
+    request_sent_wallclock = datetime.now()
+
+    # Simulate TTFT between 100-500ms
+    mock_ttft_seconds = random.uniform(0.1, 0.5)
+    first_token_ts = request_sent_ts + mock_ttft_seconds
+    first_token_wallclock = datetime.now()
+
+    # Simulate generating 50-100 tokens at 10-30 TPS
+    mock_token_count = random.randint(50, 100)
+    mock_tps = random.uniform(10.0, 30.0)
+    decode_duration = (mock_token_count - 1) / mock_tps
+    final_token_ts = first_token_ts + decode_duration
+    final_token_wallclock = datetime.now()
+
+    timing = TimingData(
+        request_sent_ts=request_sent_ts,
+        first_token_ts=first_token_ts,
+        final_token_ts=final_token_ts,
+        generated_token_count=mock_token_count,
+        client_overhead_ms=random.uniform(1.0, 5.0),
+        request_sent_wallclock=request_sent_wallclock,
+        first_token_wallclock=first_token_wallclock,
+        final_token_wallclock=final_token_wallclock,
+    )
+
+    # Generate mock events
+    events = [
+        {"content": f"mock_token_{i}", "stop": False}
+        for i in range(mock_token_count - 1)
+    ]
+    events.append({
+        "content": "",
+        "stop": True,
+        "stop_type": "eos",
+        "tokens_predicted": mock_token_count,
+        "tokens_evaluated": random.randint(20, 100),  # Mock prompt tokens
+    })
+
+    return timing, events, "eos"
 
 
 def parse_sse_line(line: str) -> Optional[dict]:
@@ -232,12 +316,26 @@ def write_metadata_file(config: BenchmarkConfig, output_dir: Path) -> Path:
         "server_mode": config.server_mode,
         "host": config.host,
         "port": config.port,
+        # Model metadata
         "model_name": config.model_name,
+        "model_filename": config.model_filename,
+        "model_sha256": config.model_sha256,
+        "parameter_count": config.parameter_count,
         "quantization": config.quantization,
+        # Generation settings
         "context_length": DEFAULT_CONTEXT_LENGTH,
         "seed": config.seed,
         "temperature": config.temperature,
         "max_new_tokens": config.max_tokens,
+        # Device/runtime metadata
+        "laptop_identifier": config.laptop_identifier,
+        "phone_identifier": config.phone_identifier,
+        "os_build_metadata": config.os_build_metadata,
+        "llama_cpp_commit": config.llama_cpp_commit,
+        "llama_cpp_build_flags": config.llama_cpp_build_flags,
+        "server_launch_args": config.server_launch_args,
+        # Mock mode indicator
+        "mock_mode": config.mock,
     }
 
     with open(metadata_file, "w", encoding="utf-8") as f:
@@ -285,13 +383,18 @@ def run_benchmark(
     Returns:
         Completed RunRecord with all metrics
     """
+    validate_reproducibility_fields(config)
+
     if output_dir is None:
         output_dir = create_result_directory(config)
 
-    # Execute the benchmark
-    timing, events, stop_reason = stream_completion(prompt, config)
+    # Execute the benchmark (real or mock)
+    if config.mock:
+        timing, events, stop_reason = generate_mock_timing()
+    else:
+        timing, events, stop_reason = stream_completion(prompt, config)
 
-    # Compute metrics
+    # Compute metrics (post-processing, after all tokens received)
     metrics = compute_metrics(timing)
     request_sent_wallclock = timing.request_sent_wallclock or datetime.now()
     first_token_wallclock = (
@@ -305,41 +408,61 @@ def run_benchmark(
         else ""
     )
 
-    # Build the run record
+    # Generate benchmark condition ID for grouping comparable runs
+    benchmark_condition_id = f"{config.node}_{config.backend}_{config.server_mode}_{config.quantization}"
+
+    # Build the run record with all mandatory fields
     record = RunRecord(
+        # Run identity
         timestamp=request_sent_wallclock.isoformat(),
         run_id=str(uuid.uuid4()),
         regime=config.run_type,
         repetition_index=repetition_index,
+        benchmark_condition_id=benchmark_condition_id,
         node=config.node,
         backend=config.backend,
         server_mode=config.server_mode,
+        # Device/runtime metadata
+        laptop_identifier=config.laptop_identifier,
+        phone_identifier=config.phone_identifier,
+        os_build_metadata=config.os_build_metadata,
+        llama_cpp_commit=config.llama_cpp_commit,
+        llama_cpp_build_flags=config.llama_cpp_build_flags,
+        server_launch_args=config.server_launch_args,
+        # Model/settings metadata
         model_name=config.model_name,
+        model_filename=config.model_filename,
+        model_sha256=config.model_sha256,
+        parameter_count=config.parameter_count,
         quantization=config.quantization,
         context_length=DEFAULT_CONTEXT_LENGTH,
         seed=config.seed,
         temperature=config.temperature,
         max_new_tokens=config.max_tokens,
+        stop_config="eos_or_max_tokens",
+        # Prompt/output metadata
         prompt_id=prompt_id,
         prompt_tier=config.prompt_tier,
         prompt_token_count=None,  # Filled from server response if available
         generated_token_count=timing.generated_token_count,
         stop_reason=stop_reason,
+        # Timing metadata
         request_sent_timestamp=request_sent_wallclock.isoformat(),
         first_token_timestamp=first_token_wallclock,
         final_token_timestamp=final_token_wallclock,
+        # Computed metrics
         ttft_ms=metrics.ttft_ms,
         decode_tps=metrics.decode_tps,
         client_overhead_ms=timing.client_overhead_ms,
     )
 
-    # Try to get prompt token count from first event
+    # Try to get prompt token count from final event
     if events and "tokens_evaluated" in events[-1]:
         record.prompt_token_count = events[-1]["tokens_evaluated"]
 
     write_metadata_file(config, output_dir)
 
-    # Write the record
+    # Write the record (post-processing, after metric computation)
     write_run_record(record, output_dir)
 
     return record
