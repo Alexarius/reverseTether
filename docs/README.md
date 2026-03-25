@@ -80,3 +80,65 @@ Raw run records include `client_overhead_ms` as an auxiliary measurement. This c
 - `PROJECT_BRIEF.md` for project scope
 - `EXPERIMENT_PROTOCOL.md` for benchmark methodology
 - `DAY0_RUNBOOK.md` for initial setup checklist
+
+## CLI Usage
+
+### Single Run
+
+Execute a single benchmark run with a specific regime:
+
+```bash
+# Cold start run with short prompt
+python -m client.cli --node yoga --backend cpu --run-type cold --prompt-tier short
+
+# Warm start run with medium prompt
+python -m client.cli --node yoga --backend cpu --run-type warm --prompt-tier medium
+
+# Mock mode for testing (no server required)
+python -m client.cli --node yoga --backend cpu --run-type cold --prompt-tier short --mock
+```
+
+### Matrix Run (Issue 08)
+
+Execute a benchmark matrix across multiple regimes with multiple repetitions per regime:
+
+```bash
+# Full matrix with all regimes (dry run validation)
+python -m client.matrix --node yoga --backend cpu --regimes cold,warm,soak \
+    --repetitions 2 --prompt-tier short --dry-run --output-dir results/test_matrix_run
+
+# Production matrix run with 5 repetitions per regime
+python -m client.matrix --node yoga --backend cpu --regimes cold,warm,soak \
+    --repetitions 5 --prompt-tier soak
+
+# Mock mode matrix (for testing without server)
+python -m client.matrix --node yoga --backend cpu --regimes warm,soak \
+    --repetitions 3 --prompt-tier short --mock
+```
+
+### Matrix Run Validation
+
+After a matrix run, validate the output:
+
+```bash
+# Inspect regime labels
+grep '"regime"' results/test_matrix_run/raw_metrics.jsonl
+
+# Confirm run count (3 regimes * 2 repetitions = 6 lines)
+wc -l results/test_matrix_run/raw_metrics.jsonl
+```
+
+### Regime Definitions
+
+| Regime | Description | Server Restart Required |
+|--------|-------------|------------------------|
+| `cold` | Captures server launch and model load cost | Yes |
+| `warm` | Normal interactive use with model already resident | No |
+| `soak` | Thermally-constrained sustained behavior after repeated requests | No |
+
+### Measurement Integrity Risks
+
+- **State Leakage Between Regimes**: If a "cold" run does not force a server restart, it is actually a "warm" run.
+- **Thermal Throttling Conflation**: Soak regime falling Decode TPS is expected due to thermal constraints. Ensure `repetition_index` is tracked.
+- **Silent Failures**: Failed repetitions must still appear in `raw_metrics.jsonl` with `stop_reason="error"` and the exception string in `notes`.
+- **Log Overwrites**: Each matrix run creates a unique timestamped directory to prevent overwriting.

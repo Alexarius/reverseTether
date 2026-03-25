@@ -19,7 +19,7 @@ import uuid
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import Iterator, Optional, List, Callable
 
 import requests
 
@@ -364,12 +364,63 @@ def write_run_record(record: RunRecord, output_dir: Path) -> Path:
     return metrics_file
 
 
+def create_failed_run_record(
+    prompt_id: str,
+    config: BenchmarkConfig,
+    repetition_index: int,
+    error_message: str,
+) -> RunRecord:
+    """Create a durable error record for a failed matrix repetition."""
+    timestamp = datetime.now().isoformat()
+    benchmark_condition_id = f"{config.node}_{config.backend}_{config.server_mode}_{config.quantization}"
+
+    return RunRecord(
+        timestamp=timestamp,
+        run_id=str(uuid.uuid4()),
+        regime=config.run_type,
+        repetition_index=repetition_index,
+        benchmark_condition_id=benchmark_condition_id,
+        node=config.node,
+        backend=config.backend,
+        server_mode=config.server_mode,
+        laptop_identifier=config.laptop_identifier,
+        phone_identifier=config.phone_identifier,
+        os_build_metadata=config.os_build_metadata,
+        llama_cpp_commit=config.llama_cpp_commit,
+        llama_cpp_build_flags=config.llama_cpp_build_flags,
+        server_launch_args=config.server_launch_args,
+        model_name=config.model_name,
+        model_filename=config.model_filename,
+        model_sha256=config.model_sha256,
+        parameter_count=config.parameter_count,
+        quantization=config.quantization,
+        context_length=DEFAULT_CONTEXT_LENGTH,
+        seed=config.seed,
+        temperature=config.temperature,
+        max_new_tokens=config.max_tokens,
+        stop_config="eos_or_max_tokens",
+        prompt_id=prompt_id,
+        prompt_tier=config.prompt_tier,
+        prompt_token_count=None,
+        generated_token_count=0,
+        stop_reason="error",
+        request_sent_timestamp=timestamp,
+        first_token_timestamp="",
+        final_token_timestamp="",
+        ttft_ms=0.0,
+        decode_tps=0.0,
+        client_overhead_ms=0.0,
+        notes=error_message,
+    )
+
+
 def run_benchmark(
     prompt: str,
     prompt_id: str,
     config: BenchmarkConfig,
     output_dir: Optional[Path] = None,
-    repetition_index: int = 0
+    repetition_index: int = 0,
+    skip_metadata: bool = False,
 ) -> RunRecord:
     """Execute a single benchmark run.
 
@@ -379,6 +430,7 @@ def run_benchmark(
         config: Benchmark configuration
         output_dir: Output directory (created if None)
         repetition_index: Index of this repetition
+        skip_metadata: If True, skip writing metadata.json (used by matrix runner)
 
     Returns:
         Completed RunRecord with all metrics
@@ -460,9 +512,246 @@ def run_benchmark(
     if events and "tokens_evaluated" in events[-1]:
         record.prompt_token_count = events[-1]["tokens_evaluated"]
 
-    write_metadata_file(config, output_dir)
+    if not skip_metadata:
+        write_metadata_file(config, output_dir)
 
     # Write the record (post-processing, after metric computation)
     write_run_record(record, output_dir)
 
     return record
+
+
+@dataclass
+class MatrixConfig:
+    """Configuration for a benchmark matrix run.
+
+    The matrix runner executes benchmarks across multiple regimes (cold, warm, soak)
+    with multiple repetitions per regime.
+    """
+
+    regimes: List[str]  # e.g., ["cold", "warm", "soak"]
+    repetitions: int  # Number of repetitions per regime
+    prompt_tier: str  # short, medium, long, soak
+    dry_run: bool = False  # If True, log actions but don't execute
+
+
+@dataclass
+class MatrixRunResult:
+    """Result from a single run within the matrix."""
+
+    regime: str
+    repetition_index: int
+    success: bool
+    record: Optional[RunRecord] = None
+    error_message: str = ""
+
+
+def create_matrix_output_directory(
+    base_config: BenchmarkConfig,
+    output_dir: Optional[Path] = None,
+) -> Path:
+    """Create the output directory for a matrix run.
+
+    Directory naming: results/{YYYYMMDD_HHMMSS}_{node}_{backend}_matrix/
+
+    Args:
+        base_config: Base benchmark configuration
+        output_dir: Override output directory if specified
+
+    Returns:
+        Path to the created directory
+    """
+    if output_dir is not None:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        return output_dir
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    dir_name = f"{timestamp}_{base_config.node}_{base_config.backend}_matrix"
+    result_dir = Path("results") / dir_name
+    result_dir.mkdir(parents=True, exist_ok=True)
+    return result_dir
+
+
+def write_matrix_metadata(
+    base_config: BenchmarkConfig,
+    matrix_config: MatrixConfig,
+    output_dir: Path,
+) -> Path:
+    """Write metadata.json for the matrix run directory.
+
+    Args:
+        base_config: Base benchmark configuration
+        matrix_config: Matrix configuration
+        output_dir: Output directory
+
+    Returns:
+        Path to the metadata file
+    """
+    metadata_file = output_dir / "metadata.json"
+    metadata = {
+        "run_type": "matrix",
+        "regimes": matrix_config.regimes,
+        "repetitions": matrix_config.repetitions,
+        "prompt_tier": matrix_config.prompt_tier,
+        "dry_run": matrix_config.dry_run,
+        "node": base_config.node,
+        "backend": base_config.backend,
+        "server_mode": base_config.server_mode,
+        "host": base_config.host,
+        "port": base_config.port,
+        # Model metadata
+        "model_name": base_config.model_name,
+        "model_filename": base_config.model_filename,
+        "model_sha256": base_config.model_sha256,
+        "parameter_count": base_config.parameter_count,
+        "quantization": base_config.quantization,
+        # Generation settings
+        "context_length": DEFAULT_CONTEXT_LENGTH,
+        "seed": base_config.seed,
+        "temperature": base_config.temperature,
+        "max_new_tokens": base_config.max_tokens,
+        # Device/runtime metadata
+        "laptop_identifier": base_config.laptop_identifier,
+        "phone_identifier": base_config.phone_identifier,
+        "os_build_metadata": base_config.os_build_metadata,
+        "llama_cpp_commit": base_config.llama_cpp_commit,
+        "llama_cpp_build_flags": base_config.llama_cpp_build_flags,
+        "server_launch_args": base_config.server_launch_args,
+        # Mock mode indicator
+        "mock_mode": base_config.mock,
+    }
+
+    with open(metadata_file, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=2)
+        f.write("\n")
+
+    return metadata_file
+
+
+def run_matrix(
+    prompt: str,
+    prompt_id: str,
+    base_config: BenchmarkConfig,
+    matrix_config: MatrixConfig,
+    output_dir: Optional[Path] = None,
+    on_regime_start: Optional[Callable[[str], None]] = None,
+    on_run_complete: Optional[Callable[[MatrixRunResult], None]] = None,
+) -> List[MatrixRunResult]:
+    """Execute a benchmark matrix across regimes and repetitions.
+
+    The matrix runner executes benchmarks in this order:
+    1. For each regime in matrix_config.regimes:
+       a. Call on_regime_start callback (for cold starts, user must restart server)
+       b. For each repetition in range(matrix_config.repetitions):
+          - Execute benchmark run
+          - Record result
+          - Call on_run_complete callback
+
+    CRITICAL MEASUREMENT INTEGRITY NOTES:
+    - Cold regime: The caller is responsible for ensuring the server is restarted
+      before cold runs. The on_regime_start callback should be used to prompt
+      the user or trigger a server restart.
+    - Warm regime: Assumes server is already warm from prior requests.
+    - Soak regime: Captures thermally-constrained behavior after repeated requests.
+      Falling Decode TPS is expected due to thermal throttling.
+
+    Args:
+        prompt: The prompt text to send
+        prompt_id: Identifier for the prompt
+        base_config: Base benchmark configuration (run_type will be overridden per regime)
+        matrix_config: Matrix configuration specifying regimes and repetitions
+        output_dir: Override output directory (auto-generated if None)
+        on_regime_start: Callback invoked at the start of each regime.
+            IMPORTANT: For cold regime, this callback should ensure server restart.
+        on_run_complete: Callback invoked after each run completes.
+
+    Returns:
+        List of MatrixRunResult for each run in the matrix.
+
+    Raises:
+        ValueError: If reproducibility fields are invalid for non-mock runs.
+    """
+    # Validate reproducibility fields upfront
+    validate_reproducibility_fields(base_config)
+
+    # Create output directory
+    actual_output_dir = create_matrix_output_directory(base_config, output_dir)
+
+    # Write matrix metadata
+    write_matrix_metadata(base_config, matrix_config, actual_output_dir)
+
+    results: List[MatrixRunResult] = []
+
+    for regime in matrix_config.regimes:
+        # Signal regime start (caller should handle cold restart if needed)
+        if on_regime_start is not None:
+            on_regime_start(regime)
+
+        for rep_idx in range(matrix_config.repetitions):
+            # Create config for this specific run
+            run_config = BenchmarkConfig(
+                node=base_config.node,
+                backend=base_config.backend,
+                run_type=regime,  # Override with current regime
+                prompt_tier=matrix_config.prompt_tier,
+                host=base_config.host,
+                port=base_config.port,
+                server_mode=base_config.server_mode,
+                temperature=base_config.temperature,
+                seed=base_config.seed,
+                max_tokens=base_config.max_tokens,
+                model_name=base_config.model_name,
+                model_filename=base_config.model_filename,
+                model_sha256=base_config.model_sha256,
+                parameter_count=base_config.parameter_count,
+                quantization=base_config.quantization,
+                laptop_identifier=base_config.laptop_identifier,
+                phone_identifier=base_config.phone_identifier,
+                os_build_metadata=base_config.os_build_metadata,
+                llama_cpp_commit=base_config.llama_cpp_commit,
+                llama_cpp_build_flags=base_config.llama_cpp_build_flags,
+                server_launch_args=base_config.server_launch_args,
+                mock=base_config.mock,
+            )
+
+            result = MatrixRunResult(
+                regime=regime,
+                repetition_index=rep_idx,
+                success=False,
+            )
+
+            if matrix_config.dry_run:
+                # Dry run: log intent but don't execute
+                result.success = True
+                result.error_message = "dry_run"
+            else:
+                try:
+                    record = run_benchmark(
+                        prompt=prompt,
+                        prompt_id=prompt_id,
+                        config=run_config,
+                        output_dir=actual_output_dir,
+                        repetition_index=rep_idx,
+                        skip_metadata=True,  # Matrix metadata already written
+                    )
+                    result.success = True
+                    result.record = record
+                except Exception as e:
+                    # Log failure but continue with matrix
+                    # CRITICAL: Do not silently skip - capture the error for audit
+                    result.success = False
+                    result.error_message = str(e)
+                    result.record = create_failed_run_record(
+                        prompt_id=prompt_id,
+                        config=run_config,
+                        repetition_index=rep_idx,
+                        error_message=result.error_message,
+                    )
+                    write_run_record(result.record, actual_output_dir)
+
+            results.append(result)
+
+            if on_run_complete is not None:
+                on_run_complete(result)
+
+    return results

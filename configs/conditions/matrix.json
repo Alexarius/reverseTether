@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Matrix runner configuration for cold, warm, and soak regime benchmarks",
+  "version": "1.0.0",
+  "defaults": {
+    "regimes": ["cold", "warm", "soak"],
+    "repetitions": 5,
+    "prompt_tier": "soak"
+  },
+  "regime_definitions": {
+    "cold": {
+      "description": "Captures server launch and model load cost. Server must be restarted before cold runs.",
+      "requires_server_restart": true,
+      "notes": "If server is not restarted, results will actually be warm runs (state leakage)."
+    },
+    "warm": {
+      "description": "Normal interactive use with model already resident in memory.",
+      "requires_server_restart": false,
+      "notes": "Assumes prior requests have warmed the KV cache and model weights."
+    },
+    "soak": {
+      "description": "Thermally-constrained sustained behavior after repeated requests.",
+      "requires_server_restart": false,
+      "notes": "Falling Decode TPS is expected due to thermal throttling. Ensure repetition_index and timestamp are recorded for thermal degradation analysis."
+    }
+  },
+  "validation": {
+    "expected_lines_formula": "len(regimes) * repetitions",
+    "example": {
+      "regimes": ["cold", "warm", "soak"],
+      "repetitions": 2,
+      "expected_lines": 6
+    }
+  },
+  "risks": {
+    "state_leakage": "If cold run does not force server restart, it is actually a warm run.",
+    "thermal_conflation": "Soak regime falling TPS may be misinterpreted if repetition_index not tracked.",
+    "silent_failures": "If orchestration catches errors silently, results suffer survivorship bias.",
+    "log_overwrites": "Concurrent runs may overwrite raw_metrics.jsonl if output directories collide."
+  }
+}
