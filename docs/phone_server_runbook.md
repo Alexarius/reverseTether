@@ -337,6 +337,67 @@ When reporting results, always include:
 - Model file name and checksum (if available)
 - Server launch command exactly as executed
 
+## Matrix Runner (Issue 08)
+
+The matrix runner executes benchmarks across multiple regimes (cold, warm, soak) with multiple repetitions per regime. This enables systematic collection of benchmark data for statistical analysis.
+
+### Running a Matrix Benchmark
+
+```bash
+# Dry run to validate setup (no actual benchmarks)
+python -m client.matrix --node s25ultra --backend cpu --regimes cold,warm,soak \
+    --repetitions 2 --prompt-tier short --dry-run --server-mode phone
+
+# Full matrix run with 5 repetitions per regime
+python -m client.matrix --node s25ultra --backend cpu --regimes cold,warm,soak \
+    --repetitions 5 --prompt-tier soak --server-mode phone \
+    --model-sha256 <64-char-hash> --llama-cpp-commit <40-char-hash>
+```
+
+### Matrix Run Protocol
+
+**Before starting a matrix run**:
+
+1. Complete the Pre-Benchmark Checklist above
+2. Run preflight: `python -m client.preflight`
+3. Start with a dry run to validate the configuration
+
+**During the matrix run**:
+
+1. **Cold Regime**: The matrix runner will warn that server restart is required. You must:
+   - Stop the server on the phone: `pkill llama-server`
+   - Allow the device to cool
+   - Restart the server
+   - Verify with preflight before continuing
+
+2. **Warm Regime**: No action needed; server remains running.
+
+3. **Soak Regime**: Monitor for thermal throttling. Falling Decode TPS is expected.
+
+### Validating Matrix Results
+
+```bash
+# Check that all runs are recorded
+wc -l results/<timestamp>_s25ultra_cpu_matrix/raw_metrics.jsonl
+# Expected: 3 regimes * 5 repetitions = 15 lines
+
+# Verify regime labels
+grep '"regime"' results/<timestamp>_s25ultra_cpu_matrix/raw_metrics.jsonl | sort | uniq -c
+# Expected: 5 cold, 5 warm, 5 soak
+
+# Check for failed runs (should be 0 for clean run)
+grep -c '"stop_reason": "error"' results/<timestamp>_s25ultra_cpu_matrix/raw_metrics.jsonl || echo "No failures"
+```
+
+### Matrix Runner Risks
+
+| Risk | Description | Mitigation |
+|------|-------------|------------|
+| State Leakage | Cold run without server restart is actually warm | Manual server restart before cold regime |
+| Thermal Conflation | Soak TPS drop misattributed | Track `repetition_index` and timestamp |
+| Silent Failures | Skipped runs bias results | Runner writes failed repetitions to JSONL with `stop_reason="error"` |
+| Log Overwrites | Concurrent runs collide | Unique timestamped directories |
+
 ## Related Documents
 
 - `PROJECT_BRIEF.md`: Hardware specs and project goals

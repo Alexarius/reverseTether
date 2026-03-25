@@ -20,7 +20,10 @@ from unittest.mock import patch, MagicMock
 
 from client.benchmark import (
     BenchmarkConfig,
+    MatrixConfig,
+    MatrixRunResult,
     run_benchmark,
+    run_matrix,
     parse_sse_line,
     build_completion_payload,
     stream_completion,
@@ -426,6 +429,353 @@ class TestReproducibilityValidation(unittest.TestCase):
             self.assertEqual(record.prompt_token_count, 7)
             self.assertTrue((output_dir / "metadata.json").exists())
             self.assertTrue((output_dir / "raw_metrics.jsonl").exists())
+
+
+class TestMatrixRunner(unittest.TestCase):
+    """Tests for the benchmark matrix runner.
+
+    These tests verify Issue 08 requirements:
+    - Correct repetition count per regime
+    - Proper regime labels in JSONL records
+    - Matrix metadata in output directory
+    - Error handling for failed runs (no silent skipping)
+    """
+
+    def test_run_matrix_correct_repetition_count(self):
+        """Matrix runner should execute exact repetition count per regime."""
+        base_config = BenchmarkConfig(
+            node="yoga",
+            backend="cpu",
+            run_type="warm",  # Will be overridden per regime
+            prompt_tier="short",
+            mock=True,
+        )
+        matrix_config = MatrixConfig(
+            regimes=["cold", "warm", "soak"],
+            repetitions=2,
+            prompt_tier="short",
+            dry_run=False,
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+
+            results = run_matrix(
+                prompt="Test prompt",
+                prompt_id="short_v1",
+                base_config=base_config,
+                matrix_config=matrix_config,
+                output_dir=output_dir,
+            )
+
+            # 3 regimes * 2 repetitions = 6 total runs
+            self.assertEqual(len(results), 6)
+
+            # Verify JSONL line count matches
+            metrics_file = output_dir / "raw_metrics.jsonl"
+            lines = metrics_file.read_text(encoding="utf-8").strip().split("\n")
+            self.assertEqual(len(lines), 6)
+
+    def test_run_matrix_correct_regime_labels(self):
+        """Each record should have the correct regime label."""
+        base_config = BenchmarkConfig(
+            node="yoga",
+            backend="cpu",
+            run_type="warm",
+            prompt_tier="short",
+            mock=True,
+        )
+        matrix_config = MatrixConfig(
+            regimes=["cold", "warm", "soak"],
+            repetitions=2,
+            prompt_tier="short",
+            dry_run=False,
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+
+            results = run_matrix(
+                prompt="Test prompt",
+                prompt_id="short_v1",
+                base_config=base_config,
+                matrix_config=matrix_config,
+                output_dir=output_dir,
+            )
+
+            # Verify regime labels in results
+            regime_counts = {"cold": 0, "warm": 0, "soak": 0}
+            for result in results:
+                self.assertIn(result.regime, regime_counts)
+                regime_counts[result.regime] += 1
+
+            # Each regime should have exactly 2 runs
+            for regime, count in regime_counts.items():
+                self.assertEqual(count, 2, f"Regime {regime} should have 2 runs")
+
+            # Verify regime labels in JSONL
+            metrics_file = output_dir / "raw_metrics.jsonl"
+            jsonl_regime_counts = {"cold": 0, "warm": 0, "soak": 0}
+            for line in metrics_file.read_text(encoding="utf-8").strip().split("\n"):
+                record = json.loads(line)
+                self.assertIn("regime", record)
+                self.assertIn(record["regime"], jsonl_regime_counts)
+                jsonl_regime_counts[record["regime"]] += 1
+
+            for regime, count in jsonl_regime_counts.items():
+                self.assertEqual(count, 2, f"JSONL regime {regime} should have 2 records")
+
+    def test_run_matrix_correct_repetition_indices(self):
+        """Each record should have the correct repetition_index."""
+        base_config = BenchmarkConfig(
+            node="yoga",
+            backend="cpu",
+            run_type="warm",
+            prompt_tier="short",
+            mock=True,
+        )
+        matrix_config = MatrixConfig(
+            regimes=["warm"],
+            repetitions=3,
+            prompt_tier="short",
+            dry_run=False,
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+
+            results = run_matrix(
+                prompt="Test prompt",
+                prompt_id="short_v1",
+                base_config=base_config,
+                matrix_config=matrix_config,
+                output_dir=output_dir,
+            )
+
+            # Verify repetition indices in results
+            indices = [r.repetition_index for r in results]
+            self.assertEqual(indices, [0, 1, 2])
+
+            # Verify repetition indices in JSONL
+            metrics_file = output_dir / "raw_metrics.jsonl"
+            jsonl_indices = []
+            for line in metrics_file.read_text(encoding="utf-8").strip().split("\n"):
+                record = json.loads(line)
+                self.assertIn("repetition_index", record)
+                jsonl_indices.append(record["repetition_index"])
+
+            self.assertEqual(jsonl_indices, [0, 1, 2])
+
+    def test_run_matrix_writes_matrix_metadata(self):
+        """Matrix run should write metadata.json with matrix configuration."""
+        base_config = BenchmarkConfig(
+            node="s25ultra",
+            backend="opencl",
+            run_type="warm",
+            prompt_tier="soak",
+            mock=True,
+        )
+        matrix_config = MatrixConfig(
+            regimes=["cold", "warm"],
+            repetitions=5,
+            prompt_tier="soak",
+            dry_run=False,
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+
+            run_matrix(
+                prompt="Test prompt",
+                prompt_id="soak_v1",
+                base_config=base_config,
+                matrix_config=matrix_config,
+                output_dir=output_dir,
+            )
+
+            metadata_file = output_dir / "metadata.json"
+            self.assertTrue(metadata_file.exists())
+
+            metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
+            self.assertEqual(metadata["run_type"], "matrix")
+            self.assertEqual(metadata["regimes"], ["cold", "warm"])
+            self.assertEqual(metadata["repetitions"], 5)
+            self.assertEqual(metadata["prompt_tier"], "soak")
+            self.assertEqual(metadata["node"], "s25ultra")
+            self.assertEqual(metadata["backend"], "opencl")
+
+    def test_run_matrix_dry_run_no_execution(self):
+        """Dry run should not execute actual benchmarks but still return results."""
+        base_config = BenchmarkConfig(
+            node="yoga",
+            backend="cpu",
+            run_type="warm",
+            prompt_tier="short",
+            mock=False,  # Non-mock, but dry_run should prevent execution
+            model_sha256=VALID_MODEL_SHA256,
+            llama_cpp_commit=VALID_LLAMA_CPP_COMMIT,
+        )
+        matrix_config = MatrixConfig(
+            regimes=["cold", "warm"],
+            repetitions=2,
+            prompt_tier="short",
+            dry_run=True,  # Dry run mode
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+
+            results = run_matrix(
+                prompt="Test prompt",
+                prompt_id="short_v1",
+                base_config=base_config,
+                matrix_config=matrix_config,
+                output_dir=output_dir,
+            )
+
+            # Should have results for all planned runs
+            self.assertEqual(len(results), 4)
+
+            # All results should be success with dry_run error message
+            for result in results:
+                self.assertTrue(result.success)
+                self.assertEqual(result.error_message, "dry_run")
+                self.assertIsNone(result.record)
+
+            # JSONL should not exist (no actual runs)
+            metrics_file = output_dir / "raw_metrics.jsonl"
+            self.assertFalse(metrics_file.exists())
+
+    def test_run_matrix_callbacks_invoked(self):
+        """Matrix runner should invoke callbacks at appropriate times."""
+        base_config = BenchmarkConfig(
+            node="yoga",
+            backend="cpu",
+            run_type="warm",
+            prompt_tier="short",
+            mock=True,
+        )
+        matrix_config = MatrixConfig(
+            regimes=["cold", "warm"],
+            repetitions=2,
+            prompt_tier="short",
+            dry_run=False,
+        )
+
+        regime_starts = []
+        run_completes = []
+
+        def on_regime_start(regime: str) -> None:
+            regime_starts.append(regime)
+
+        def on_run_complete(result: MatrixRunResult) -> None:
+            run_completes.append((result.regime, result.repetition_index))
+
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+
+            run_matrix(
+                prompt="Test prompt",
+                prompt_id="short_v1",
+                base_config=base_config,
+                matrix_config=matrix_config,
+                output_dir=output_dir,
+                on_regime_start=on_regime_start,
+                on_run_complete=on_run_complete,
+            )
+
+        # on_regime_start should be called once per regime
+        self.assertEqual(regime_starts, ["cold", "warm"])
+
+        # on_run_complete should be called for each run
+        expected_completes = [
+            ("cold", 0), ("cold", 1),
+            ("warm", 0), ("warm", 1),
+        ]
+        self.assertEqual(run_completes, expected_completes)
+
+    def test_run_matrix_handles_failed_runs(self):
+        """Matrix runner should durably log failed runs without stopping."""
+        base_config = BenchmarkConfig(
+            node="yoga",
+            backend="cpu",
+            run_type="warm",
+            prompt_tier="short",
+            model_sha256=VALID_MODEL_SHA256,
+            llama_cpp_commit=VALID_LLAMA_CPP_COMMIT,
+            mock=False,
+        )
+        matrix_config = MatrixConfig(
+            regimes=["warm"],
+            repetitions=3,
+            prompt_tier="short",
+            dry_run=False,
+        )
+
+        # Mock stream_completion to fail on second call
+        call_count = [0]
+
+        def mock_stream(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 2:
+                raise ConnectionError("Simulated network failure")
+            # Return valid mock timing for successful calls
+            timing = TimingData(
+                request_sent_ts=10.0,
+                first_token_ts=10.5,
+                final_token_ts=12.0,
+                generated_token_count=5,
+                client_overhead_ms=2.0,
+                request_sent_wallclock=datetime(2026, 3, 25, 12, 0, 0),
+                first_token_wallclock=datetime(2026, 3, 25, 12, 0, 1),
+                final_token_wallclock=datetime(2026, 3, 25, 12, 0, 2),
+            )
+            return timing, [{"tokens_evaluated": 10}], "eos"
+
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+
+            with patch("client.benchmark.stream_completion", side_effect=mock_stream):
+                results = run_matrix(
+                    prompt="Test prompt",
+                    prompt_id="short_v1",
+                    base_config=base_config,
+                    matrix_config=matrix_config,
+                    output_dir=output_dir,
+                )
+
+            metrics_file = output_dir / "raw_metrics.jsonl"
+            lines = metrics_file.read_text(encoding="utf-8").strip().splitlines()
+            records = [json.loads(line) for line in lines]
+
+        # All runs should be attempted
+        self.assertEqual(len(results), 3)
+
+        # First run: success
+        self.assertTrue(results[0].success)
+        self.assertIsNotNone(results[0].record)
+
+        # Second run: failure (captured, not silently skipped)
+        self.assertFalse(results[1].success)
+        self.assertIn("network failure", results[1].error_message.lower())
+        self.assertIsNotNone(results[1].record)
+        self.assertEqual(results[1].record.stop_reason, "error")
+        self.assertEqual(results[1].record.notes, "Simulated network failure")
+
+        # Third run: success (matrix continued after failure)
+        self.assertTrue(results[2].success)
+        self.assertIsNotNone(results[2].record)
+        self.assertEqual(len(lines), 3)
+        self.assertEqual([record["repetition_index"] for record in records], [0, 1, 2])
+
+        failed_record = records[1]
+        self.assertEqual(failed_record["regime"], "warm")
+        self.assertEqual(failed_record["repetition_index"], 1)
+        self.assertEqual(failed_record["ttft_ms"], 0.0)
+        self.assertEqual(failed_record["decode_tps"], 0.0)
+        self.assertEqual(failed_record["generated_token_count"], 0)
+        self.assertEqual(failed_record["stop_reason"], "error")
+        self.assertEqual(failed_record["notes"], "Simulated network failure")
 
 
 if __name__ == "__main__":
