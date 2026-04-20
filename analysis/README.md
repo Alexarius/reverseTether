@@ -23,15 +23,15 @@ This directory contains scripts for:
 python analysis/aggregate.py --input results/ --output results/summaries/
 ```
 
-**Outputs** (written to `--output` directory):
+**Outputs** (written to `--output/aggregation_{timestamp}/`):
 
-| File                          | Description                                              |
-|-------------------------------|----------------------------------------------------------|
-| `summary_{timestamp}.csv`     | Aggregated metrics in CSV format                         |
-| `summary_{timestamp}.md`      | Markdown table with cross-check instructions             |
-| `ttft_comparison_{timestamp}.png` | Bar chart of TTFT p50 by condition                   |
-| `decode_tps_comparison_{timestamp}.png` | Bar chart of Decode TPS mean by condition      |
-| `raw_export_{timestamp}.csv`  | All raw records with source directory annotations        |
+| File                        | Description                                       |
+|-----------------------------|---------------------------------------------------|
+| `summary.csv`               | Aggregated metrics in CSV format                  |
+| `summary.md`                | Markdown table with cross-check instructions      |
+| `ttft_comparison.png`       | Bar chart of TTFT p50 by condition                |
+| `decode_tps_comparison.png` | Bar chart of Decode TPS mean by condition         |
+| `raw_export.csv`            | All raw records with source directory annotations |
 
 **Grouping dimensions**:
 

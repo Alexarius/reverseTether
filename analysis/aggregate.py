@@ -442,14 +442,17 @@ Manual Cross-Check:
 
     # Generate timestamp for output files
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_output_dir = output_dir / f"aggregation_{ts}"
+    run_output_dir.mkdir(parents=True, exist_ok=True)
+    logger.info("Aggregation run output directory: %s", run_output_dir)
 
     # Save CSV
-    csv_path = output_dir / f"summary_{ts}.csv"
+    csv_path = run_output_dir / "summary.csv"
     agg_df.to_csv(csv_path, index=False)
     logger.info("Saved summary CSV to %s", csv_path)
 
     # Save Markdown table
-    md_path = output_dir / f"summary_{ts}.md"
+    md_path = run_output_dir / "summary.md"
     md_content = f"""# Benchmark Summary
 
 Generated: {datetime.now().isoformat()}
@@ -483,11 +486,11 @@ To verify these derived metrics:
     logger.info("Saved summary Markdown to %s", md_path)
 
     # Generate plots
-    plot_ttft_comparison(agg_df, output_dir / f"ttft_comparison_{ts}.png")
-    plot_decode_tps_comparison(agg_df, output_dir / f"decode_tps_comparison_{ts}.png")
+    plot_ttft_comparison(agg_df, run_output_dir / "ttft_comparison.png")
+    plot_decode_tps_comparison(agg_df, run_output_dir / "decode_tps_comparison.png")
 
     # Also save raw data export for detailed analysis
-    raw_export_path = output_dir / f"raw_export_{ts}.csv"
+    raw_export_path = run_output_dir / "raw_export.csv"
     df.to_csv(raw_export_path, index=False)
     logger.info("Saved raw data export to %s", raw_export_path)
 

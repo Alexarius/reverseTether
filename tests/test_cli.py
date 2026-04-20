@@ -286,6 +286,13 @@ class TestMatrixCliValidation(unittest.TestCase):
             except SystemExit as e:
                 self.fail(f"Dry run should not exit with error, got code {e.code}")
 
+        create_dir_mock.assert_called_once()
+        requested_output_dir = create_dir_mock.call_args[0][1]
+        self.assertRegex(
+            str(requested_output_dir).replace("\\", "/"),
+            r"^results/\d{8}_\d{6}_yoga_cpu_matrix$",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

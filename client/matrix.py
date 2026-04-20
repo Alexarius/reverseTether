@@ -7,6 +7,7 @@ Usage:
 import argparse
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from .benchmark import (
@@ -278,7 +279,11 @@ Examples:
         dry_run=args.dry_run,
     )
 
-    requested_output_dir = Path(args.output_dir) if args.output_dir else None
+    if args.output_dir is None:
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        requested_output_dir = Path(f"results/{ts}_{args.node}_{args.backend}_matrix")
+    else:
+        requested_output_dir = Path(args.output_dir)
     output_dir = create_matrix_output_directory(base_config, requested_output_dir)
 
     total_runs = len(regimes) * args.repetitions
