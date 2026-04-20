@@ -160,6 +160,13 @@ class TestRunRecord(unittest.TestCase):
         self.assertEqual(record.max_new_tokens, 512)
         self.assertEqual(record.server_mode, "local")
         self.assertEqual(record.client_overhead_ms, 0.0)
+        self.assertIsNone(record.start_temperature_c)
+        self.assertIsNone(record.end_temperature_c)
+        self.assertEqual(record.temperature_source, "")
+        self.assertIsNone(record.start_battery_level_percent)
+        self.assertIsNone(record.end_battery_level_percent)
+        self.assertFalse(hasattr(record, "device_temperature_c"))
+        self.assertFalse(hasattr(record, "battery_level_percent"))
 
     def test_run_record_metrics_optional(self):
         """Metrics fields can be None initially."""

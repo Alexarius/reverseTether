@@ -135,11 +135,40 @@
     },
     "environment": {
       "type": "object",
-      "description": "Runtime environment state",
+      "description": "Runtime environment state captured outside the active inference window",
       "properties": {
+        "capture_phase": {
+          "type": "string",
+          "enum": ["pre_run", "post_run", "snapshot"],
+          "description": "Whether this metadata snapshot was captured before a run, after a run, or as a standalone snapshot"
+        },
+        "device_temperature_c": {
+          "type": ["number", "string", "null"],
+          "description": "Single device temperature snapshot in Celsius, usually battery temperature when readable"
+        },
+        "start_temperature_c": {
+          "type": ["number", "string", "null"],
+          "description": "Pre-run device temperature snapshot in Celsius; optional and never inferred"
+        },
+        "end_temperature_c": {
+          "type": ["number", "string", "null"],
+          "description": "Post-run device temperature snapshot in Celsius; optional and never inferred"
+        },
+        "temperature_source": {
+          "type": "string",
+          "description": "Source for device temperature fields, e.g. sysfs_power_supply_battery_temp, dumpsys_battery_temperature, or unavailable"
+        },
         "battery_level_percent": {
           "type": ["string", "integer"],
-          "description": "Battery charge percentage"
+          "description": "Single battery charge percentage snapshot"
+        },
+        "start_battery_level_percent": {
+          "type": ["string", "integer", "null"],
+          "description": "Pre-run battery charge percentage snapshot"
+        },
+        "end_battery_level_percent": {
+          "type": ["string", "integer", "null"],
+          "description": "Post-run battery charge percentage snapshot"
         },
         "battery_status": {
           "type": "string",
@@ -179,6 +208,10 @@
         "manual_observations": {
           "type": ["string", "null"],
           "description": "Any manual observations about device state"
+        },
+        "known_anomalies": {
+          "type": ["string", "null"],
+          "description": "Known anomalies that may affect interpretation, such as USB reconnects, notifications, or manual intervention"
         }
       }
     },

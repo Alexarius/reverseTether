@@ -28,6 +28,10 @@ SERVER_CONTEXT_LENGTH="${SERVER_CONTEXT_LENGTH:-${DEFAULT_CONTEXT_LENGTH}}"
 SERVER_GPU_LAYERS="${SERVER_GPU_LAYERS:-}"
 SERVER_PORT="${SERVER_PORT:-${DEFAULT_PORT}}"
 SERVER_HOST="${SERVER_HOST:-${DEFAULT_HOST}}"
+CAPTURE_PHASE="${CAPTURE_PHASE:-pre_run}"
+BACKGROUND_APPS_MINIMIZED="${BACKGROUND_APPS_MINIMIZED:-}"
+KNOWN_ANOMALIES="${KNOWN_ANOMALIES:-}"
+MANUAL_OBSERVATIONS="${MANUAL_OBSERVATIONS:-}"
 
 # ==============================================================================
 # Helper functions
@@ -65,6 +69,13 @@ print_usage() {
     echo "  --gpu-layers N        Explicit -ngl value"
     echo "  --port N              Explicit server port"
     echo "  --host HOST           Explicit bind host"
+    echo "  --phase VALUE         Metadata phase: pre_run|post_run|snapshot"
+    echo "  --background-apps-minimized VALUE"
+    echo "                         true|false if manually checked before capture"
+    echo "  --known-anomalies TEXT"
+    echo "                         Known anomalies affecting interpretation"
+    echo "  --manual-observations TEXT"
+    echo "                         Free-form manual observation notes"
     echo "  --help                Show this help message"
     echo ""
     echo "Environment variables:"
@@ -75,6 +86,10 @@ print_usage() {
     echo "  SERVER_GPU_LAYERS     GPU offload layers (-ngl)"
     echo "  SERVER_PORT           Server port"
     echo "  SERVER_HOST           Server bind host"
+    echo "  CAPTURE_PHASE         pre_run|post_run|snapshot"
+    echo "  BACKGROUND_APPS_MINIMIZED true|false when known"
+    echo "  KNOWN_ANOMALIES       Known anomalies affecting interpretation"
+    echo "  MANUAL_OBSERVATIONS   Free-form manual observation notes"
 }
 
 json_escape() {
@@ -89,6 +104,68 @@ json_escape() {
 
 is_integer() {
     [[ "${1}" =~ ^[0-9]+$ ]]
+}
+
+json_number_or_null() {
+    local value="${1}"
+    if [[ "${value}" =~ ^-?[0-9]+([.][0-9]+)?$ ]]; then
+        printf '%s' "${value}"
+    else
+        printf 'null'
+    fi
+}
+
+json_integer_or_null() {
+    local value="${1}"
+    if [[ "${value}" =~ ^[0-9]+$ ]]; then
+        printf '%s' "${value}"
+    else
+        printf 'null'
+    fi
+}
+
+json_bool_or_null() {
+    local value="${1,,}"
+    case "${value}" in
+        true|false)
+            printf '%s' "${value}"
+            ;;
+        *)
+            printf 'null'
+            ;;
+    esac
+}
+
+normalize_temperature_c() {
+    local raw="${1}"
+
+    if [[ "${raw}" =~ ^-?[0-9]+$ ]]; then
+        awk -v raw="${raw}" 'BEGIN {
+            value = raw + 0
+            abs_value = value < 0 ? -value : value
+            if (abs_value >= 10000) {
+                value = value / 1000
+            } else if (abs_value >= 100) {
+                value = value / 10
+            }
+            printf "%.1f", value
+        }'
+    elif [[ "${raw}" =~ ^-?[0-9]+[.][0-9]+$ ]]; then
+        printf '%s' "${raw}"
+    else
+        echo "unknown"
+    fi
+}
+
+value_for_phase() {
+    local target_phase="$1"
+    local value="$2"
+
+    if [[ "${CAPTURE_PHASE}" == "${target_phase}" ]]; then
+        printf '%s' "${value}"
+    else
+        echo "unknown"
+    fi
 }
 
 default_gpu_layers_for_backend() {
@@ -129,6 +206,17 @@ validate_backend() {
             ;;
         *)
             echo "Error: Invalid backend '${SERVER_BACKEND}'." >&2
+            exit 1
+            ;;
+    esac
+}
+
+validate_capture_phase() {
+    case "${CAPTURE_PHASE}" in
+        pre_run|post_run|snapshot)
+            ;;
+        *)
+            echo "Error: Invalid capture phase '${CAPTURE_PHASE}'." >&2
             exit 1
             ;;
     esac
@@ -275,6 +363,35 @@ get_battery_status() {
     fi
 }
 
+# Get battery/device temperature snapshot in Celsius when Android exposes it.
+# Android battery temperatures are commonly tenths of a degree Celsius; some
+# thermal files expose millicelsius. normalize_temperature_c handles both.
+get_battery_temperature_snapshot() {
+    local raw
+    raw=$(safe_read "/sys/class/power_supply/battery/temp")
+
+    if [[ "${raw}" != "unknown" && -n "${raw}" ]]; then
+        echo "sysfs_power_supply_battery_temp|$(normalize_temperature_c "${raw}")"
+        return 0
+    fi
+
+    raw=$(safe_read "/sys/class/power_supply/Battery/temp")
+    if [[ "${raw}" != "unknown" && -n "${raw}" ]]; then
+        echo "sysfs_power_supply_Battery_temp|$(normalize_temperature_c "${raw}")"
+        return 0
+    fi
+
+    if command -v dumpsys &>/dev/null; then
+        raw=$(dumpsys battery 2>/dev/null | awk -F: '/^[[:space:]]*temperature:/ {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2; exit}' || true)
+        if [[ -n "${raw}" ]]; then
+            echo "dumpsys_battery_temperature|$(normalize_temperature_c "${raw}")"
+            return 0
+        fi
+    fi
+
+    echo "unavailable|unknown"
+}
+
 # Get thermal zone temperatures
 get_thermal_zones() {
     local zones=""
@@ -292,7 +409,7 @@ get_thermal_zones() {
             else
                 zones="${zones},"
             fi
-            zones="${zones}{\"zone\":\"${name}\",\"type\":\"${type}\",\"temp_millicelsius\":\"${temp}\"}"
+            zones="${zones}{\"zone\":\"$(json_escape "${name}")\",\"type\":\"$(json_escape "${type}")\",\"temp_millicelsius\":\"$(json_escape "${temp}")\"}"
         fi
     done
 
@@ -393,6 +510,22 @@ while [[ $# -gt 0 ]]; do
             SERVER_HOST="$2"
             shift 2
             ;;
+        --phase)
+            CAPTURE_PHASE="${2//-/_}"
+            shift 2
+            ;;
+        --background-apps-minimized)
+            BACKGROUND_APPS_MINIMIZED="$2"
+            shift 2
+            ;;
+        --known-anomalies)
+            KNOWN_ANOMALIES="$2"
+            shift 2
+            ;;
+        --manual-observations)
+            MANUAL_OBSERVATIONS="$2"
+            shift 2
+            ;;
         --help)
             print_usage
             exit 0
@@ -406,6 +539,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 validate_backend
+validate_capture_phase
 
 if detect_running_server_config; then
     if [[ "${SERVER_BACKEND}" == "auto" ]]; then
@@ -432,6 +566,16 @@ validate_integer_field "SERVER_PORT" "${SERVER_PORT}"
 # ==============================================================================
 
 CAPTURE_TIMESTAMP=$(date -Iseconds)
+BATTERY_LEVEL_PERCENT="$(get_battery_level)"
+BATTERY_STATUS="$(get_battery_status)"
+BATTERY_TEMPERATURE_SNAPSHOT="$(get_battery_temperature_snapshot)"
+TEMPERATURE_SOURCE="${BATTERY_TEMPERATURE_SNAPSHOT%%|*}"
+DEVICE_TEMPERATURE_C="${BATTERY_TEMPERATURE_SNAPSHOT#*|}"
+START_TEMPERATURE_C="$(value_for_phase "pre_run" "${DEVICE_TEMPERATURE_C}")"
+END_TEMPERATURE_C="$(value_for_phase "post_run" "${DEVICE_TEMPERATURE_C}")"
+START_BATTERY_LEVEL_PERCENT="$(value_for_phase "pre_run" "${BATTERY_LEVEL_PERCENT}")"
+END_BATTERY_LEVEL_PERCENT="$(value_for_phase "post_run" "${BATTERY_LEVEL_PERCENT}")"
+THERMAL_ZONES_JSON="$(get_thermal_zones)"
 
 # ==============================================================================
 # Build JSON output
@@ -442,7 +586,7 @@ CAPTURE_TIMESTAMP=$(date -Iseconds)
 
 cat << EOF
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "capture_timestamp": "$(json_escape "${CAPTURE_TIMESTAMP}")",
   "llama_cpp": {
     "directory": "$(json_escape "${LLAMA_CPP_DIR}")",
@@ -457,9 +601,16 @@ cat << EOF
     "memory": $(get_memory_info)
   },
   "environment": {
-    "battery_level_percent": "$(json_escape "$(get_battery_level)")",
-    "battery_status": "$(json_escape "$(get_battery_status)")",
-    "thermal_zones": $(get_thermal_zones)
+    "capture_phase": "$(json_escape "${CAPTURE_PHASE}")",
+    "device_temperature_c": $(json_number_or_null "${DEVICE_TEMPERATURE_C}"),
+    "start_temperature_c": $(json_number_or_null "${START_TEMPERATURE_C}"),
+    "end_temperature_c": $(json_number_or_null "${END_TEMPERATURE_C}"),
+    "temperature_source": "$(json_escape "${TEMPERATURE_SOURCE}")",
+    "battery_level_percent": "$(json_escape "${BATTERY_LEVEL_PERCENT}")",
+    "start_battery_level_percent": $(json_integer_or_null "${START_BATTERY_LEVEL_PERCENT}"),
+    "end_battery_level_percent": $(json_integer_or_null "${END_BATTERY_LEVEL_PERCENT}"),
+    "battery_status": "$(json_escape "${BATTERY_STATUS}")",
+    "thermal_zones": ${THERMAL_ZONES_JSON}
   },
   "server_config": {
     "model_path": "$(json_escape "${SERVER_MODEL_PATH}")",
@@ -470,8 +621,9 @@ cat << EOF
     "backend": "$(json_escape "${SERVER_BACKEND}")"
   },
   "notes": {
-    "background_apps_minimized": null,
-    "manual_observations": null
+    "background_apps_minimized": $(json_bool_or_null "${BACKGROUND_APPS_MINIMIZED}"),
+    "manual_observations": "$(json_escape "${MANUAL_OBSERVATIONS}")",
+    "known_anomalies": "$(json_escape "${KNOWN_ANOMALIES}")"
   }
 }
 EOF

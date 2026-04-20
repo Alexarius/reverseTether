@@ -178,8 +178,11 @@ class RunRecord:
     client_overhead_ms: float = 0.0
 
     # Optional thermal / environment metadata
-    device_temperature_c: Optional[float] = None
-    battery_level_percent: Optional[int] = None
+    start_temperature_c: Optional[float] = None
+    end_temperature_c: Optional[float] = None
+    temperature_source: str = ""
+    start_battery_level_percent: Optional[int] = None
+    end_battery_level_percent: Optional[int] = None
     battery_status: str = ""  # Charging, Discharging, Full
     background_apps_minimized: Optional[bool] = None
     known_anomalies: str = ""

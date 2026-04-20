@@ -71,6 +71,16 @@ class BenchmarkConfig:
     llama_cpp_build_flags: str = ""
     server_launch_args: str = ""
 
+    # Optional thermal / environment metadata captured outside inference window
+    start_temperature_c: Optional[float] = None
+    end_temperature_c: Optional[float] = None
+    temperature_source: str = ""
+    start_battery_level_percent: Optional[int] = None
+    end_battery_level_percent: Optional[int] = None
+    battery_status: str = ""
+    background_apps_minimized: Optional[bool] = None
+    known_anomalies: str = ""
+
     # Mock mode for testing
     mock: bool = False
 
@@ -373,6 +383,15 @@ def write_metadata_file(config: BenchmarkConfig, output_dir: Path) -> Path:
         "llama_cpp_commit": config.llama_cpp_commit,
         "llama_cpp_build_flags": config.llama_cpp_build_flags,
         "server_launch_args": config.server_launch_args,
+        # Optional thermal / environment metadata
+        "start_temperature_c": config.start_temperature_c,
+        "end_temperature_c": config.end_temperature_c,
+        "temperature_source": config.temperature_source,
+        "start_battery_level_percent": config.start_battery_level_percent,
+        "end_battery_level_percent": config.end_battery_level_percent,
+        "battery_status": config.battery_status,
+        "background_apps_minimized": config.background_apps_minimized,
+        "known_anomalies": config.known_anomalies,
         # Mock mode indicator
         "mock_mode": config.mock,
     }
@@ -449,6 +468,14 @@ def create_failed_run_record(
         ttft_ms=0.0,
         decode_tps=0.0,
         client_overhead_ms=0.0,
+        start_temperature_c=config.start_temperature_c,
+        end_temperature_c=config.end_temperature_c,
+        temperature_source=config.temperature_source,
+        start_battery_level_percent=config.start_battery_level_percent,
+        end_battery_level_percent=config.end_battery_level_percent,
+        battery_status=config.battery_status,
+        background_apps_minimized=config.background_apps_minimized,
+        known_anomalies=config.known_anomalies,
         notes=error_message,
     )
 
@@ -545,6 +572,15 @@ def run_benchmark(
         ttft_ms=metrics.ttft_ms,
         decode_tps=metrics.decode_tps,
         client_overhead_ms=timing.client_overhead_ms,
+        # Optional thermal / environment metadata
+        start_temperature_c=config.start_temperature_c,
+        end_temperature_c=config.end_temperature_c,
+        temperature_source=config.temperature_source,
+        start_battery_level_percent=config.start_battery_level_percent,
+        end_battery_level_percent=config.end_battery_level_percent,
+        battery_status=config.battery_status,
+        background_apps_minimized=config.background_apps_minimized,
+        known_anomalies=config.known_anomalies,
     )
 
     if not skip_metadata:
@@ -652,6 +688,15 @@ def write_matrix_metadata(
         "llama_cpp_commit": base_config.llama_cpp_commit,
         "llama_cpp_build_flags": base_config.llama_cpp_build_flags,
         "server_launch_args": base_config.server_launch_args,
+        # Optional thermal / environment metadata
+        "start_temperature_c": base_config.start_temperature_c,
+        "end_temperature_c": base_config.end_temperature_c,
+        "temperature_source": base_config.temperature_source,
+        "start_battery_level_percent": base_config.start_battery_level_percent,
+        "end_battery_level_percent": base_config.end_battery_level_percent,
+        "battery_status": base_config.battery_status,
+        "background_apps_minimized": base_config.background_apps_minimized,
+        "known_anomalies": base_config.known_anomalies,
         # Mock mode indicator
         "mock_mode": base_config.mock,
     }
@@ -746,6 +791,14 @@ def run_matrix(
                 llama_cpp_commit=base_config.llama_cpp_commit,
                 llama_cpp_build_flags=base_config.llama_cpp_build_flags,
                 server_launch_args=base_config.server_launch_args,
+                start_temperature_c=base_config.start_temperature_c,
+                end_temperature_c=base_config.end_temperature_c,
+                temperature_source=base_config.temperature_source,
+                start_battery_level_percent=base_config.start_battery_level_percent,
+                end_battery_level_percent=base_config.end_battery_level_percent,
+                battery_status=base_config.battery_status,
+                background_apps_minimized=base_config.background_apps_minimized,
+                known_anomalies=base_config.known_anomalies,
                 mock=base_config.mock,
             )
 

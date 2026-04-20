@@ -48,6 +48,14 @@ class TestBenchmarkLogging(unittest.TestCase):
             model_name="Llama-3.2-1B-Instruct",
             model_sha256=VALID_MODEL_SHA256,
             llama_cpp_commit=VALID_LLAMA_CPP_COMMIT,
+            start_temperature_c=32.5,
+            end_temperature_c=34.0,
+            temperature_source="sysfs_power_supply_battery_temp",
+            start_battery_level_percent=81,
+            end_battery_level_percent=80,
+            battery_status="Discharging",
+            background_apps_minimized=True,
+            known_anomalies="none",
         )
         request_sent_wallclock = datetime(2026, 3, 22, 12, 0, 0)
         first_token_wallclock = datetime(2026, 3, 22, 12, 0, 1)
@@ -91,6 +99,14 @@ class TestBenchmarkLogging(unittest.TestCase):
             self.assertEqual(metadata["prompt_tier"], "short")
             self.assertEqual(metadata["server_mode"], "local")
             self.assertEqual(metadata["model_name"], "Llama-3.2-1B-Instruct")
+            self.assertEqual(metadata["start_temperature_c"], 32.5)
+            self.assertEqual(metadata["end_temperature_c"], 34.0)
+            self.assertEqual(metadata["temperature_source"], "sysfs_power_supply_battery_temp")
+            self.assertEqual(metadata["start_battery_level_percent"], 81)
+            self.assertEqual(metadata["end_battery_level_percent"], 80)
+            self.assertEqual(metadata["battery_status"], "Discharging")
+            self.assertTrue(metadata["background_apps_minimized"])
+            self.assertEqual(metadata["known_anomalies"], "none")
 
             raw_record = json.loads(raw_metrics_path.read_text(encoding="utf-8").strip())
             self.assertEqual(record.request_sent_timestamp, request_sent_wallclock.isoformat())
@@ -101,6 +117,16 @@ class TestBenchmarkLogging(unittest.TestCase):
             self.assertEqual(raw_record["final_token_timestamp"], final_token_wallclock.isoformat())
             self.assertEqual(record.client_overhead_ms, 12.5)
             self.assertEqual(raw_record["client_overhead_ms"], 12.5)
+            self.assertEqual(raw_record["start_temperature_c"], 32.5)
+            self.assertEqual(raw_record["end_temperature_c"], 34.0)
+            self.assertEqual(raw_record["temperature_source"], "sysfs_power_supply_battery_temp")
+            self.assertEqual(raw_record["start_battery_level_percent"], 81)
+            self.assertEqual(raw_record["end_battery_level_percent"], 80)
+            self.assertEqual(raw_record["battery_status"], "Discharging")
+            self.assertTrue(raw_record["background_apps_minimized"])
+            self.assertEqual(raw_record["known_anomalies"], "none")
+            self.assertNotIn("device_temperature_c", raw_record)
+            self.assertNotIn("battery_level_percent", raw_record)
 
 
 class TestSSEParsing(unittest.TestCase):
@@ -1022,6 +1048,11 @@ class TestMatrixRunner(unittest.TestCase):
             model_sha256=VALID_MODEL_SHA256,
             llama_cpp_commit=VALID_LLAMA_CPP_COMMIT,
             mock=False,
+            start_temperature_c=35.0,
+            end_temperature_c=36.5,
+            temperature_source="dumpsys_battery_temperature",
+            start_battery_level_percent=76,
+            end_battery_level_percent=75,
         )
         matrix_config = MatrixConfig(
             regimes=["warm"],
@@ -1094,6 +1125,11 @@ class TestMatrixRunner(unittest.TestCase):
         self.assertEqual(failed_record["generated_token_count"], 0)
         self.assertEqual(failed_record["stop_reason"], "error")
         self.assertEqual(failed_record["notes"], "Simulated network failure")
+        self.assertEqual(failed_record["start_temperature_c"], 35.0)
+        self.assertEqual(failed_record["end_temperature_c"], 36.5)
+        self.assertEqual(failed_record["temperature_source"], "dumpsys_battery_temperature")
+        self.assertEqual(failed_record["start_battery_level_percent"], 76)
+        self.assertEqual(failed_record["end_battery_level_percent"], 75)
 
 
 if __name__ == "__main__":
