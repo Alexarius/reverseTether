@@ -185,6 +185,51 @@ Mock mode:
         default="",
         help="OS version and build information"
     )
+    parser.add_argument(
+        "--start-temperature-c",
+        type=float,
+        default=None,
+        help="Pre-run device temperature snapshot in Celsius"
+    )
+    parser.add_argument(
+        "--end-temperature-c",
+        type=float,
+        default=None,
+        help="Post-run device temperature snapshot in Celsius"
+    )
+    parser.add_argument(
+        "--temperature-source",
+        default="",
+        help="Source for temperature fields"
+    )
+    parser.add_argument(
+        "--start-battery-level-percent",
+        type=int,
+        default=None,
+        help="Pre-run battery percentage snapshot"
+    )
+    parser.add_argument(
+        "--end-battery-level-percent",
+        type=int,
+        default=None,
+        help="Post-run battery percentage snapshot"
+    )
+    parser.add_argument(
+        "--battery-status",
+        default="",
+        help="Battery charging status, if captured"
+    )
+    parser.add_argument(
+        "--background-apps-minimized",
+        choices=["true", "false"],
+        default=None,
+        help="Whether background apps were minimized before capture"
+    )
+    parser.add_argument(
+        "--known-anomalies",
+        default="",
+        help="Known anomalies affecting this run"
+    )
 
     args = parser.parse_args()
 
@@ -225,6 +270,17 @@ Mock mode:
         laptop_identifier=args.laptop_identifier,
         phone_identifier=args.phone_identifier,
         os_build_metadata=args.os_build_metadata,
+        start_temperature_c=args.start_temperature_c,
+        end_temperature_c=args.end_temperature_c,
+        temperature_source=args.temperature_source,
+        start_battery_level_percent=args.start_battery_level_percent,
+        end_battery_level_percent=args.end_battery_level_percent,
+        battery_status=args.battery_status,
+        background_apps_minimized=(
+            None if args.background_apps_minimized is None
+            else args.background_apps_minimized == "true"
+        ),
+        known_anomalies=args.known_anomalies,
         mock=args.mock,
     )
 

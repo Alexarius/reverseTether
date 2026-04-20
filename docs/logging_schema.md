@@ -139,14 +139,24 @@ The client captures this from the `tokens_evaluated` field in the server's final
 
 ### Optional Thermal/Environment Metadata
 
+Thermal and environment fields are context fields only. They must be captured
+strictly before the prompt is sent or after the final token is received; do not
+poll thermal sensors during the active inference window.
+
 | Field | Type | Description |
 |-------|------|-------------|
-| `device_temperature_c` | float \| null | Device temperature in Celsius |
-| `battery_level_percent` | integer \| null | Battery percentage |
-| `battery_status` | string | `Charging`, `Discharging`, `Full` |
+| `start_temperature_c` | float \| null | Pre-run device temperature snapshot in Celsius |
+| `end_temperature_c` | float \| null | Post-run device temperature snapshot in Celsius |
+| `temperature_source` | string | Source for temperature fields, e.g., `sysfs_power_supply_battery_temp`, `dumpsys_battery_temperature`, or `unavailable` |
+| `start_battery_level_percent` | integer \| null | Pre-run battery percentage snapshot |
+| `end_battery_level_percent` | integer \| null | Post-run battery percentage snapshot |
+| `battery_status` | string | `Charging`, `Discharging`, `Full`, or platform-specific status |
 | `background_apps_minimized` | boolean \| null | Whether apps were minimized |
 | `known_anomalies` | string | Any known issues during run |
 | `notes` | string | General notes |
+
+If pre/post snapshots are unavailable, leave the corresponding optional fields
+absent or `null`. Missing thermal data must not be replaced with guessed values.
 
 ## Example Run Record
 
@@ -187,8 +197,11 @@ The client captures this from the `tokens_evaluated` field in the server's final
   "ttft_ms": 333.3,
   "decode_tps": 25.8,
   "client_overhead_ms": 2.5,
-  "device_temperature_c": null,
-  "battery_level_percent": null,
+  "start_temperature_c": null,
+  "end_temperature_c": null,
+  "temperature_source": "unavailable",
+  "start_battery_level_percent": null,
+  "end_battery_level_percent": null,
   "battery_status": "",
   "background_apps_minimized": null,
   "known_anomalies": "",
@@ -282,3 +295,4 @@ pytest tests/test_cli.py -k "prompt" -v
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0.0 | 2026-03-25 | Initial schema with mandatory reproducibility fields |
+| 1.1.0 | 2026-04-20 | Documented optional pre/post thermal, battery, and anomaly context fields for Issue 11 |
