@@ -426,12 +426,11 @@ get_cpu_info() {
     model=$(grep -m1 "model name" /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs || echo "unknown")
     cores=$(nproc 2>/dev/null || echo "unknown")
 
-    # If model name not found (common on ARM), try Hardware
     if [[ "${model}" == "unknown" ]] || [[ -z "${model}" ]]; then
         model=$(grep -m1 "Hardware" /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs || echo "unknown")
     fi
 
-    echo "{\"model\":\"${model}\",\"cores\":\"${cores}\"}"
+    echo "{\"model\":\"$(json_escape "${model}")\",\"cores\":\"$(json_escape "${cores}")\"}"
 }
 
 # Get memory info
@@ -439,7 +438,8 @@ get_memory_info() {
     local total available
     total=$(grep "MemTotal" /proc/meminfo 2>/dev/null | awk '{print $2}' || echo "unknown")
     available=$(grep "MemAvailable" /proc/meminfo 2>/dev/null | awk '{print $2}' || echo "unknown")
-    echo "{\"total_kb\":\"${total}\",\"available_kb\":\"${available}\"}"
+    
+    echo "{\"total_kb\":\"$(json_escape "${total}")\",\"available_kb\":\"$(json_escape "${available}")\"}"
 }
 
 # Get Android build info if available
@@ -451,7 +451,8 @@ get_android_info() {
         release=$(getprop ro.build.version.release 2>/dev/null || echo "unknown")
         device=$(getprop ro.product.device 2>/dev/null || echo "unknown")
         model=$(getprop ro.product.model 2>/dev/null || echo "unknown")
-        echo "{\"sdk_version\":\"${sdk}\",\"release\":\"${release}\",\"device\":\"${device}\",\"model\":\"${model}\"}"
+        
+        echo "{\"sdk_version\":\"$(json_escape "${sdk}")\",\"release\":\"$(json_escape "${release}")\",\"device\":\"$(json_escape "${device}")\",\"model\":\"$(json_escape "${model}")\"}"
     else
         echo "{\"sdk_version\":\"unknown\",\"release\":\"unknown\",\"device\":\"unknown\",\"model\":\"unknown\"}"
     fi
