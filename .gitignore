@@ -5,6 +5,8 @@ env/
 # Project Results / Output Data
 results/
 paper/
+metadata_benchmarks/
+final_input/
 
 # Python Cache Files
 __pycache__/
