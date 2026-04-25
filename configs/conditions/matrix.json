@@ -5,7 +5,7 @@
   "defaults": {
     "regimes": ["cold", "warm", "soak"],
     "repetitions": 5,
-    "prompt_tier": "soak"
+    "prompt_selection": "all_final_prompts"
   },
   "regime_definitions": {
     "cold": {
@@ -21,15 +21,18 @@
     "soak": {
       "description": "Thermally-constrained sustained behavior after repeated requests.",
       "requires_server_restart": false,
+      "prompt_workload": "Uses the single fixed soak prompt fixture only. Short, medium, and long prompt tiers must not execute under the soak regime.",
+      "duration_policy": "Represents the 15-minute sustained-load phase by repeating the fixed soak prompt. Do not change the soak duration without a DECISION_LOG.md entry.",
       "notes": "Falling Decode TPS is expected due to thermal throttling. Ensure repetition_index and timestamp are recorded for thermal degradation analysis."
     }
   },
   "validation": {
-    "expected_lines_formula": "len(regimes) * repetitions",
+    "expected_lines_formula": "sum((1 if regime == 'soak' else selected_non_soak_prompt_count) * repetitions for regime in regimes)",
     "example": {
-      "regimes": ["cold", "warm", "soak"],
+      "regimes": ["warm", "soak"],
       "repetitions": 2,
-      "expected_lines": 6
+      "selected_non_soak_prompt_count": 1,
+      "expected_lines": 4
     }
   },
   "risks": {

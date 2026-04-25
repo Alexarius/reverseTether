@@ -1,7 +1,8 @@
 """CLI entry point for benchmark matrix runs.
 
 Usage:
-    python -m client.matrix --node yoga --backend cpu --regimes cold,warm,soak --repetitions 5 --prompt-tier short
+    python -m client.matrix --node yoga --backend cpu --regimes cold,warm,soak \
+        --repetitions 5 --all-final-prompts
 """
 
 import argparse
@@ -18,7 +19,17 @@ from .benchmark import (
     run_matrix,
     validate_reproducibility_fields,
 )
-from .cli import get_prompt_tier_by_id, get_prompts, load_prompt_suite
+from .cli import (
+    SOAK_PROMPT_TIER,
+    get_prompt_tier_by_id,
+    get_prompt_tier_for_id,
+    get_prompts,
+    get_soak_prompt,
+    load_prompt_suite,
+)
+
+
+VALID_REGIMES = {"cold", "warm", "soak"}
 
 
 def build_config_from_args(args: argparse.Namespace) -> BenchmarkConfig:
@@ -56,6 +67,69 @@ def build_config_from_args(args: argparse.Namespace) -> BenchmarkConfig:
     )
 
 
+def parse_regimes(raw_regimes: str) -> list[str]:
+    """Parse and validate comma-separated matrix regimes."""
+    regimes = [regime.strip() for regime in raw_regimes.split(",")]
+    for regime in regimes:
+        if regime not in VALID_REGIMES:
+            raise ValueError(
+                f"Invalid regime '{regime}'. Valid options: cold, warm, soak"
+            )
+    return regimes
+
+
+def resolve_matrix_prompts(
+    suite: dict,
+    args: argparse.Namespace,
+    regimes: list[str],
+) -> tuple[list[tuple[str, str]], tuple[str, str] | None, dict[str, str]]:
+    """Resolve normal prompts plus the separate fixed soak prompt."""
+    prompt_tiers_by_id = get_prompt_tier_by_id(suite)
+    has_soak_regime = SOAK_PROMPT_TIER in regimes
+    has_normal_regime = any(regime != SOAK_PROMPT_TIER for regime in regimes)
+    soak_prompt = get_soak_prompt(suite) if has_soak_regime else None
+    normal_prompts: list[tuple[str, str]] = []
+
+    if has_normal_regime:
+        if args.prompt_tier == SOAK_PROMPT_TIER:
+            raise ValueError("Cold and warm regimes cannot use the soak prompt fixture")
+        if (
+            args.prompt_id is not None
+            and get_prompt_tier_for_id(suite, args.prompt_id) == SOAK_PROMPT_TIER
+        ):
+            raise ValueError("Cold and warm regimes cannot use the soak prompt fixture")
+
+        normal_prompts = get_prompts(
+            suite,
+            prompt_tier=args.prompt_tier,
+            prompt_id=args.prompt_id,
+            all_final_prompts=args.all_final_prompts,
+        )
+        normal_prompts = [
+            (prompt, prompt_id)
+            for prompt, prompt_id in normal_prompts
+            if prompt_tiers_by_id[prompt_id] != SOAK_PROMPT_TIER
+        ]
+        if not normal_prompts:
+            raise ValueError("Cold and warm regimes require non-soak prompts")
+    else:
+        if args.prompt_tier is not None and args.prompt_tier != SOAK_PROMPT_TIER:
+            raise ValueError("Soak regime requires the fixed soak prompt fixture")
+        if (
+            args.prompt_id is not None
+            and get_prompt_tier_for_id(suite, args.prompt_id) != SOAK_PROMPT_TIER
+        ):
+            raise ValueError("Soak regime requires the fixed soak prompt fixture")
+        get_prompts(
+            suite,
+            prompt_tier=args.prompt_tier,
+            prompt_id=args.prompt_id,
+            all_final_prompts=args.all_final_prompts,
+        )
+
+    return normal_prompts, soak_prompt, prompt_tiers_by_id
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Benchmark matrix runner for llama.cpp server",
@@ -64,11 +138,11 @@ def main() -> None:
 Examples:
   # Full matrix with all regimes (dry run)
   python -m client.matrix --node yoga --backend cpu --regimes cold,warm,soak \
-      --repetitions 2 --prompt-tier short --dry-run
+      --repetitions 2 --all-final-prompts --dry-run
 
-  # Matrix run with custom output directory
+  # Full matrix run with custom output directory
   python -m client.matrix --node yoga --backend cpu --regimes cold,warm,soak \
-      --repetitions 5 --prompt-tier soak --output-dir results/test_matrix_run
+      --repetitions 5 --all-final-prompts --output-dir results/test_matrix_run
 
   # Mock mode matrix (for testing without server)
   python -m client.matrix --node yoga --backend cpu --regimes warm,soak \
@@ -267,11 +341,16 @@ Examples:
         sys.exit(1)
 
     try:
-        prompts = get_prompts(
+        regimes = parse_regimes(args.regimes)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        prompts, soak_prompt, prompt_tiers_by_id = resolve_matrix_prompts(
             suite,
-            prompt_tier=args.prompt_tier,
-            prompt_id=args.prompt_id,
-            all_final_prompts=args.all_final_prompts,
+            args,
+            regimes,
         )
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
@@ -279,14 +358,6 @@ Examples:
     except KeyError as e:
         print(f"Error: Prompt selection '{e.args[0]}' not found in suite", file=sys.stderr)
         sys.exit(1)
-    prompt_tiers_by_id = get_prompt_tier_by_id(suite)
-
-    regimes = [regime.strip() for regime in args.regimes.split(",")]
-    valid_regimes = {"cold", "warm", "soak"}
-    for regime in regimes:
-        if regime not in valid_regimes:
-            print(f"Error: Invalid regime '{regime}'. Valid options: cold, warm, soak", file=sys.stderr)
-            sys.exit(1)
 
     base_config = build_config_from_args(args)
 
@@ -311,6 +382,7 @@ Examples:
         all_final_prompts=args.all_final_prompts,
         prompt_selection_mode=prompt_selection_mode,
         prompt_tiers_by_id=prompt_tiers_by_id,
+        soak_prompt=soak_prompt,
         dry_run=args.dry_run,
     )
 
@@ -321,7 +393,10 @@ Examples:
         requested_output_dir = Path(args.output_dir)
     output_dir = create_matrix_output_directory(base_config, requested_output_dir)
 
-    total_runs = len(regimes) * len(prompts) * args.repetitions
+    total_runs = sum(
+        (1 if regime == SOAK_PROMPT_TIER else len(prompts)) * args.repetitions
+        for regime in regimes
+    )
     print("Matrix Benchmark Run")
     print("=" * 40)
     print(f"  Node: {base_config.node}")
@@ -332,7 +407,9 @@ Examples:
         print(f"  Prompt ID: {args.prompt_id}")
     else:
         print("  Prompt selection: all final non-soak prompts")
-    print(f"  Selected prompts: {len(prompts)}")
+    print(f"  Selected normal prompts: {len(prompts)}")
+    if soak_prompt is not None:
+        print(f"  Soak prompt: {soak_prompt[1]}")
     print(f"  Server mode: {base_config.server_mode}")
     print(f"  Regimes: {', '.join(regimes)}")
     print(f"  Repetitions per regime: {args.repetitions}")

@@ -758,6 +758,11 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
             regimes=["warm", "soak"],
             repetitions=2,
             prompt_tier="short",
+            prompt_tiers_by_id={
+                "short_smoke_v1": "short",
+                "soak_smoke_v1": "soak",
+            },
+            soak_prompt=("Soak prompt", "soak_smoke_v1"),
             dry_run=False,
         )
 
@@ -785,11 +790,21 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
                 self.assertIn("suite_type", record)
                 self.assertIn("cache_policy", record)
                 self.assertIn("fixture_prompt_token_count", record)
-                # prompt_id should match what was passed
-                self.assertEqual(record["prompt_id"], "short_smoke_v1")
                 self.assertEqual(record["suite_type"], "smoke")
                 self.assertEqual(record["cache_policy"], "cache_mismatch")
                 self.assertEqual(record["fixture_prompt_token_count"], 37)
+
+            records = [json.loads(line) for line in lines]
+            self.assertEqual(
+                [(record["regime"], record["prompt_id"], record["prompt_tier"])
+                 for record in records],
+                [
+                    ("warm", "short_smoke_v1", "short"),
+                    ("warm", "short_smoke_v1", "short"),
+                    ("soak", "soak_smoke_v1", "soak"),
+                    ("soak", "soak_smoke_v1", "soak"),
+                ],
+            )
 
 
 class TestMatrixRunner(unittest.TestCase):
@@ -815,6 +830,11 @@ class TestMatrixRunner(unittest.TestCase):
             regimes=["cold", "warm", "soak"],
             repetitions=2,
             prompt_tier="short",
+            prompt_tiers_by_id={
+                "short_smoke_v1": "short",
+                "soak_smoke_v1": "soak",
+            },
+            soak_prompt=("Soak prompt", "soak_smoke_v1"),
             dry_run=False,
         )
 
@@ -849,6 +869,11 @@ class TestMatrixRunner(unittest.TestCase):
             regimes=["cold", "warm", "soak"],
             repetitions=2,
             prompt_tier="short",
+            prompt_tiers_by_id={
+                "short_smoke_v1": "short",
+                "soak_smoke_v1": "soak",
+            },
+            soak_prompt=("Soak prompt", "soak_smoke_v1"),
             dry_run=False,
         )
 
@@ -1021,6 +1046,56 @@ class TestMatrixRunner(unittest.TestCase):
             ],
         )
 
+    def test_run_matrix_uses_fixed_soak_prompt_for_soak_regime(self):
+        """Mixed warm/soak matrices must run normal prompts only for warm and soak only for soak."""
+        base_config = BenchmarkConfig(
+            node="yoga",
+            backend="cpu",
+            run_type="warm",
+            prompt_tier="",
+            mock=True,
+        )
+        matrix_config = MatrixConfig(
+            regimes=["warm", "soak"],
+            repetitions=1,
+            prompt_tiers_by_id={
+                "prompt_short": "short",
+                "prompt_medium": "medium",
+                "prompt_soak": "soak",
+            },
+            soak_prompt=("Soak prompt", "prompt_soak"),
+            dry_run=False,
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+
+            run_matrix(
+                prompts=[
+                    ("Short prompt", "prompt_short"),
+                    ("Medium prompt", "prompt_medium"),
+                ],
+                base_config=base_config,
+                matrix_config=matrix_config,
+                output_dir=output_dir,
+            )
+
+            metrics_file = output_dir / "raw_metrics.jsonl"
+            records = [
+                json.loads(line)
+                for line in metrics_file.read_text(encoding="utf-8").strip().splitlines()
+            ]
+
+        self.assertEqual(
+            [(record["regime"], record["prompt_id"], record["prompt_tier"])
+             for record in records],
+            [
+                ("warm", "prompt_short", "short"),
+                ("warm", "prompt_medium", "medium"),
+                ("soak", "prompt_soak", "soak"),
+            ],
+        )
+
     def test_run_matrix_writes_matrix_metadata(self):
         """Matrix run should write metadata.json with matrix configuration."""
         base_config = BenchmarkConfig(
@@ -1031,9 +1106,11 @@ class TestMatrixRunner(unittest.TestCase):
             mock=True,
         )
         matrix_config = MatrixConfig(
-            regimes=["cold", "warm"],
+            regimes=["soak"],
             repetitions=5,
             prompt_tier="soak",
+            prompt_tiers_by_id={"soak_smoke_v1": "soak"},
+            soak_prompt=("Test prompt", "soak_smoke_v1"),
             dry_run=False,
         )
 
@@ -1041,7 +1118,7 @@ class TestMatrixRunner(unittest.TestCase):
             output_dir = Path(temp_dir)
 
             run_matrix(
-                prompts=[("Test prompt", "soak_smoke_v1")],
+                prompts=[],
                 base_config=base_config,
                 matrix_config=matrix_config,
                 output_dir=output_dir,
@@ -1052,7 +1129,7 @@ class TestMatrixRunner(unittest.TestCase):
 
             metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
             self.assertEqual(metadata["run_type"], "matrix")
-            self.assertEqual(metadata["regimes"], ["cold", "warm"])
+            self.assertEqual(metadata["regimes"], ["soak"])
             self.assertEqual(metadata["repetitions"], 5)
             self.assertEqual(metadata["prompt_selection_mode"], "prompt_tier")
             self.assertEqual(metadata["prompt_tier"], "soak")

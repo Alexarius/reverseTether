@@ -10,6 +10,8 @@ from unittest.mock import patch
 from client.cli import (
     get_prompt_for_tier,
     get_prompts,
+    get_prompts_for_run_type,
+    get_soak_prompt,
     load_prompt_suite,
     main as cli_main,
     validate_prompt_suite,
@@ -322,6 +324,33 @@ class TestPromptSelection(unittest.TestCase):
         )
         self.assertNotIn("final_soak_01", prompt_ids)
 
+    def test_get_soak_prompt_returns_single_fixed_fixture(self):
+        """Soak selection should resolve to the single fixed soak fixture."""
+        self.assertEqual(
+            get_soak_prompt(self.suite),
+            ("Soak prompt", "final_soak_01"),
+        )
+
+    def test_soak_run_type_uses_soak_fixture_for_all_final_selection(self):
+        """Soak run selection should use the soak fixture instead of normal prompts."""
+        self.assertEqual(
+            get_prompts_for_run_type(
+                self.suite,
+                run_type="soak",
+                all_final_prompts=True,
+            ),
+            [("Soak prompt", "final_soak_01")],
+        )
+
+    def test_soak_run_type_rejects_non_soak_prompt_tier(self):
+        """Soak runs must fail rather than executing a normal prompt tier."""
+        with self.assertRaisesRegex(ValueError, "Soak regime requires"):
+            get_prompts_for_run_type(
+                self.suite,
+                run_type="soak",
+                prompt_tier="short",
+            )
+
 
 class TestRealPromptSuiteIntegrity(unittest.TestCase):
     """Integration tests for the actual configs/prompts/smoke_suite.json file.
@@ -594,6 +623,51 @@ class TestCliValidation(unittest.TestCase):
         create_dir_mock.assert_not_called()
         run_mock.assert_not_called()
 
+    def test_main_rejects_short_prompt_for_soak_regime(self):
+        """CLI should reject a normal prompt tier for soak runs."""
+        suite = {
+            "suite_type": "smoke",
+            "prompts": {
+                "short": {
+                    "tier": "short",
+                    "text": "Test prompt",
+                    "id": "short_smoke_v1",
+                },
+                "soak": {
+                    "tier": "soak",
+                    "text": "Soak prompt",
+                    "id": "soak_smoke_v1",
+                },
+            },
+        }
+
+        with patch("client.cli.load_prompt_suite", return_value=suite), patch(
+            "client.cli.create_result_directory"
+        ) as create_dir_mock, patch("client.cli.run_benchmark") as run_mock, patch(
+            "sys.stderr",
+            new_callable=io.StringIO,
+        ), patch(
+            "sys.argv",
+            [
+                "client.cli",
+                "--node",
+                "yoga",
+                "--backend",
+                "cpu",
+                "--run-type",
+                "soak",
+                "--prompt-tier",
+                "short",
+                "--mock",
+            ],
+        ):
+            with self.assertRaises(SystemExit) as exc:
+                cli_main()
+
+        self.assertEqual(exc.exception.code, 1)
+        create_dir_mock.assert_not_called()
+        run_mock.assert_not_called()
+
     def test_main_exits_before_running_when_hashes_are_missing(self):
         """Real runs should exit non-zero before directory creation if hashes are missing."""
         suite = {
@@ -752,6 +826,115 @@ class TestMatrixCliValidation(unittest.TestCase):
             run_matrix_mock.call_args.kwargs["prompts"],
             [("Test prompt", "short_smoke_v1")],
         )
+
+    def test_run_matrix_rejects_short_prompt_for_soak_only_regime(self):
+        """Matrix CLI should reject a normal prompt tier for soak-only runs."""
+        suite = {
+            "suite_type": "smoke",
+            "prompts": {
+                "short": {
+                    "tier": "short",
+                    "text": "Test prompt",
+                    "id": "short_smoke_v1",
+                },
+                "soak": {
+                    "tier": "soak",
+                    "text": "Soak prompt",
+                    "id": "soak_smoke_v1",
+                },
+            },
+        }
+
+        with patch("client.matrix.load_prompt_suite", return_value=suite), patch(
+            "client.matrix.create_matrix_output_directory"
+        ) as create_dir_mock, patch("client.matrix.run_matrix") as run_matrix_mock, patch(
+            "sys.stderr",
+            new_callable=io.StringIO,
+        ), patch(
+            "sys.argv",
+            [
+                "client.matrix",
+                "--node",
+                "yoga",
+                "--backend",
+                "cpu",
+                "--regimes",
+                "soak",
+                "--prompt-tier",
+                "short",
+                "--mock",
+            ],
+        ):
+            with self.assertRaises(SystemExit) as exc:
+                matrix_main()
+
+        self.assertEqual(exc.exception.code, 1)
+        create_dir_mock.assert_not_called()
+        run_matrix_mock.assert_not_called()
+
+    def test_run_matrix_warm_soak_passes_fixed_soak_prompt_separately(self):
+        """Matrix CLI should exclude soak from normal expansion and pass it separately."""
+        suite = {
+            "suite_type": "smoke",
+            "prompts": {
+                "short": {
+                    "tier": "short",
+                    "text": "Short prompt",
+                    "id": "short_smoke_v1",
+                },
+                "medium": {
+                    "tier": "medium",
+                    "text": "Medium prompt",
+                    "id": "medium_smoke_v1",
+                },
+                "soak": {
+                    "tier": "soak",
+                    "text": "Soak prompt",
+                    "id": "soak_smoke_v1",
+                },
+            },
+        }
+
+        with patch("client.matrix.load_prompt_suite", return_value=suite), patch(
+            "client.matrix.create_matrix_output_directory"
+        ) as create_dir_mock, patch(
+            "client.matrix.run_matrix"
+        ) as run_matrix_mock, patch(
+            "sys.stdout",
+            new_callable=io.StringIO,
+        ), patch(
+            "sys.argv",
+            [
+                "client.matrix",
+                "--node",
+                "yoga",
+                "--backend",
+                "cpu",
+                "--regimes",
+                "warm,soak",
+                "--repetitions",
+                "1",
+                "--all-final-prompts",
+                "--dry-run",
+                "--mock",
+            ],
+        ):
+            create_dir_mock.return_value = Path("results/test_matrix_run")
+            run_matrix_mock.return_value = []
+            try:
+                matrix_main()
+            except SystemExit as e:
+                self.fail(f"Warm/soak matrix should not exit with error, got code {e.code}")
+
+        self.assertEqual(
+            run_matrix_mock.call_args.kwargs["prompts"],
+            [
+                ("Medium prompt", "medium_smoke_v1"),
+                ("Short prompt", "short_smoke_v1"),
+            ],
+        )
+        matrix_config = run_matrix_mock.call_args.kwargs["matrix_config"]
+        self.assertEqual(matrix_config.soak_prompt, ("Soak prompt", "soak_smoke_v1"))
 
 
 if __name__ == "__main__":

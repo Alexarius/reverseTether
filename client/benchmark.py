@@ -618,6 +618,7 @@ class MatrixConfig:
     all_final_prompts: bool = False
     prompt_selection_mode: str = "prompt_tier"
     prompt_tiers_by_id: Optional[Dict[str, str]] = None
+    soak_prompt: Optional[Tuple[str, str]] = None
     dry_run: bool = False  # If True, log actions but don't execute
 
 
@@ -685,7 +686,7 @@ def write_matrix_metadata(
         "prompt_tier": matrix_config.prompt_tier,
         "prompt_id": matrix_config.prompt_id,
         "all_final_prompts": matrix_config.all_final_prompts,
-        "selected_prompt_ids": [prompt_id for _, prompt_id in prompts],
+        "selected_prompt_ids": _matrix_selected_prompt_ids(matrix_config, prompts),
         "dry_run": matrix_config.dry_run,
         "node": base_config.node,
         "backend": base_config.backend,
@@ -730,6 +731,60 @@ def write_matrix_metadata(
     return metadata_file
 
 
+def _matrix_selected_prompt_ids(
+    matrix_config: MatrixConfig,
+    prompts: List[Tuple[str, str]],
+) -> List[str]:
+    """Return matrix prompt IDs, including the fixed soak prompt when present."""
+    prompt_ids = [prompt_id for _, prompt_id in prompts]
+    if matrix_config.soak_prompt is not None:
+        soak_prompt_id = matrix_config.soak_prompt[1]
+        if soak_prompt_id not in prompt_ids:
+            prompt_ids.append(soak_prompt_id)
+    return prompt_ids
+
+
+def _prompts_for_regime(
+    regime: str,
+    prompts: List[Tuple[str, str]],
+    matrix_config: MatrixConfig,
+) -> List[Tuple[str, str]]:
+    """Resolve the prompt workload for a specific matrix regime."""
+    prompt_tiers_by_id = matrix_config.prompt_tiers_by_id or {}
+
+    if regime == "soak":
+        soak_prompts = []
+        if matrix_config.soak_prompt is not None:
+            soak_prompts.append(matrix_config.soak_prompt)
+        soak_prompts.extend(
+            (prompt, prompt_id)
+            for prompt, prompt_id in prompts
+            if prompt_tiers_by_id.get(prompt_id) == "soak"
+        )
+        unique_soak_prompts = []
+        seen_prompt_ids = set()
+        for prompt, prompt_id in soak_prompts:
+            if prompt_id in seen_prompt_ids:
+                continue
+            unique_soak_prompts.append((prompt, prompt_id))
+            seen_prompt_ids.add(prompt_id)
+        if len(unique_soak_prompts) != 1:
+            raise ValueError("Soak regime requires exactly one fixed soak prompt")
+        return unique_soak_prompts
+
+    normal_prompts = [
+        (prompt, prompt_id)
+        for prompt, prompt_id in prompts
+        if prompt_tiers_by_id.get(
+            prompt_id,
+            matrix_config.prompt_tier or "",
+        ) != "soak"
+    ]
+    if not normal_prompts:
+        raise ValueError("Cold and warm regimes require non-soak prompts")
+    return normal_prompts
+
+
 def run_matrix(
     prompts: List[Tuple[str, str]],
     base_config: BenchmarkConfig,
@@ -743,7 +798,10 @@ def run_matrix(
     The matrix runner executes benchmarks in this order:
     1. For each regime in matrix_config.regimes:
        a. Call on_regime_start callback (for cold starts, user must restart server)
-       b. For each prompt in prompts:
+       b. Resolve the prompts for that regime:
+          - cold/warm use non-soak prompts
+          - soak uses exactly one fixed soak prompt
+       c. For each resolved prompt:
           - For each repetition in range(matrix_config.repetitions):
             - Execute benchmark run
             - Record result
@@ -789,8 +847,14 @@ def run_matrix(
         if on_regime_start is not None:
             on_regime_start(regime)
 
-        for prompt, prompt_id in prompts:
-            prompt_tier = prompt_tiers_by_id.get(prompt_id, matrix_config.prompt_tier or "")
+        for prompt, prompt_id in _prompts_for_regime(regime, prompts, matrix_config):
+            if regime == "soak":
+                prompt_tier = "soak"
+            else:
+                prompt_tier = prompt_tiers_by_id.get(
+                    prompt_id,
+                    matrix_config.prompt_tier or "",
+                )
 
             for rep_idx in range(matrix_config.repetitions):
                 # Create config for this specific run

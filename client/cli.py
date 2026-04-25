@@ -22,6 +22,7 @@ from .benchmark import (
 )
 
 
+SOAK_PROMPT_TIER = "soak"
 FINAL_DATASET_BUCKET_COUNTS = {"short": 5, "medium": 5, "long": 5, "soak": 1}
 FINAL_PROMPT_TIERS = {"short", "medium", "long"}
 VALID_SUITE_TYPES = {"smoke", "final_dataset"}
@@ -160,12 +161,74 @@ def get_prompts(
     ]
 
 
+def get_soak_prompt(suite: dict) -> Tuple[str, str]:
+    """Return the single fixed soak prompt fixture."""
+    selected = [
+        prompt_data
+        for prompt_key, prompt_data in suite["prompts"].items()
+        if prompt_data.get("tier", prompt_key) == SOAK_PROMPT_TIER
+    ]
+    if len(selected) != 1:
+        raise ValueError(
+            "Prompt suite must define exactly one fixed soak prompt fixture"
+        )
+
+    prompt_data = selected[0]
+    return prompt_data["text"], prompt_data["id"]
+
+
 def get_prompt_tier_by_id(suite: dict) -> dict[str, str]:
     """Map prompt IDs to tiers for per-run log metadata."""
     return {
         prompt_data["id"]: prompt_data.get("tier", prompt_key)
         for prompt_key, prompt_data in suite["prompts"].items()
     }
+
+
+def get_prompt_tier_for_id(suite: dict, prompt_id: str) -> str:
+    """Return the prompt tier for a prompt ID."""
+    prompt_tiers_by_id = get_prompt_tier_by_id(suite)
+    try:
+        return prompt_tiers_by_id[prompt_id]
+    except KeyError:
+        raise KeyError(prompt_id) from None
+
+
+def get_prompts_for_run_type(
+    suite: dict,
+    run_type: str,
+    prompt_tier: str | None = None,
+    prompt_id: str | None = None,
+    all_final_prompts: bool = False,
+) -> List[Tuple[str, str]]:
+    """Return prompts that are valid for a single run regime."""
+    validate_prompt_selection(prompt_tier, prompt_id, all_final_prompts)
+
+    if run_type == SOAK_PROMPT_TIER:
+        if prompt_tier is not None and prompt_tier != SOAK_PROMPT_TIER:
+            raise ValueError("Soak regime requires the fixed soak prompt fixture")
+        if (
+            prompt_id is not None
+            and get_prompt_tier_for_id(suite, prompt_id) != SOAK_PROMPT_TIER
+        ):
+            raise ValueError("Soak regime requires the fixed soak prompt fixture")
+        return [get_soak_prompt(suite)]
+
+    prompts = get_prompts(
+        suite,
+        prompt_tier=prompt_tier,
+        prompt_id=prompt_id,
+        all_final_prompts=all_final_prompts,
+    )
+    prompt_tiers_by_id = get_prompt_tier_by_id(suite)
+    soak_prompt_ids = [
+        selected_prompt_id
+        for _, selected_prompt_id in prompts
+        if prompt_tiers_by_id[selected_prompt_id] == SOAK_PROMPT_TIER
+    ]
+    if soak_prompt_ids:
+        raise ValueError("Cold and warm regimes cannot use the soak prompt fixture")
+    return prompts
 
 
 def get_prompt_for_tier(suite: dict, tier: str) -> tuple[str, str]:
@@ -395,8 +458,9 @@ Mock mode:
 
     # Get prompt selection.
     try:
-        prompts = get_prompts(
+        prompts = get_prompts_for_run_type(
             suite,
+            run_type=args.run_type,
             prompt_tier=args.prompt_tier,
             prompt_id=args.prompt_id,
             all_final_prompts=args.all_final_prompts,
@@ -461,6 +525,8 @@ Mock mode:
         print(f"  Prompt tier: {args.prompt_tier}")
     elif args.prompt_id is not None:
         print(f"  Prompt ID: {args.prompt_id}")
+    elif args.run_type == SOAK_PROMPT_TIER:
+        print("  Prompt selection: fixed soak prompt")
     else:
         print("  Prompt selection: all final non-soak prompts")
     print(f"  Selected prompts: {len(prompts)}")
