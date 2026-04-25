@@ -318,8 +318,8 @@ class TestRealPromptSuiteIntegrity(unittest.TestCase):
         # Soak ID should be versioned
         self.assertTrue(soak_data["id"].startswith("soak_smoke_v"))
 
-    def test_final_suite_stub_exists(self):
-        """Final suite stub should be present with approved bucket structure."""
+    def test_final_suite_exists_with_approved_bucket_structure(self):
+        """Final suite should be present with approved bucket structure."""
         final_suite_path = Path("configs/prompts/final_suite.json")
         self.assertTrue(final_suite_path.exists())
         final_suite = load_prompt_suite(final_suite_path)
@@ -333,6 +333,106 @@ class TestRealPromptSuiteIntegrity(unittest.TestCase):
             self.assertIs(type(prompt_data["fixture_prompt_token_count"]), int)
 
         self.assertEqual(bucket_counts, {"short": 5, "medium": 5, "long": 5, "soak": 1})
+
+    def test_final_suite_has_final_metadata(self):
+        """Final suite metadata should mark the fixture as approved final content."""
+        final_suite = load_prompt_suite(Path("configs/prompts/final_suite.json"))
+        self.assertEqual(
+            final_suite["dataset_metadata"],
+            {
+                "status": "final",
+                "approval_state": "content approved; ready for final evidence",
+                "fixture_prompt_token_count_method": (
+                    "precomputed via Llama-3.2-1B-Instruct tokenizer"
+                ),
+                "notes": "Dataset derived from CNN/DailyMail. Fixed offline.",
+            },
+        )
+        self.assertNotIn("stub", final_suite["description"].lower())
+
+    def test_final_suite_schema_shape_is_unchanged(self):
+        """Final suite must not add fields beyond the approved prompt schema."""
+        final_suite = load_prompt_suite(Path("configs/prompts/final_suite.json"))
+        self.assertEqual(
+            set(final_suite),
+            {"version", "suite_type", "description", "dataset_metadata", "prompts"},
+        )
+        self.assertEqual(
+            set(final_suite["dataset_metadata"]),
+            {
+                "status",
+                "approval_state",
+                "fixture_prompt_token_count_method",
+                "notes",
+            },
+        )
+        for prompt_data in final_suite["prompts"].values():
+            self.assertEqual(
+                set(prompt_data),
+                {"id", "tier", "fixture_prompt_token_count", "description", "text"},
+            )
+
+    def test_final_suite_prompt_ids_and_token_count_bands(self):
+        """Final prompts should be versioned, distinct, and near approved token bands."""
+        import re
+
+        final_suite = load_prompt_suite(Path("configs/prompts/final_suite.json"))
+        id_pattern = re.compile(r"^final_(short|medium|long|soak)_\d{2}$")
+        count_ranges = {
+            "short": (40, 70),
+            "medium": (450, 550),
+            "long": (1400, 1550),
+            "soak": (100, 140),
+        }
+        texts = []
+
+        for prompt_key, prompt_data in final_suite["prompts"].items():
+            prompt_id = prompt_data["id"]
+            tier = prompt_data["tier"]
+            count = prompt_data["fixture_prompt_token_count"]
+            low, high = count_ranges[tier]
+            self.assertEqual(prompt_key, prompt_id)
+            self.assertRegex(prompt_id, id_pattern)
+            self.assertGreaterEqual(count, low)
+            self.assertLessEqual(count, high)
+            self.assertNotIn("stub", prompt_data["description"].lower())
+            self.assertNotIn("stub", prompt_data["text"].lower())
+            texts.append(prompt_data["text"])
+
+        self.assertEqual(len(texts), len(set(texts)))
+
+    def test_final_suite_prompt_patterns(self):
+        """Final prompts should match the approved tier-specific text patterns."""
+        final_suite = load_prompt_suite(Path("configs/prompts/final_suite.json"))
+        medium_instruction = (
+            "Summarize the main arguments and identify two key individuals mentioned "
+            "in the article above."
+        )
+        long_instruction = (
+            "Provide a detailed review of the text above, extract the main invariants, "
+            "risks, and summarize the outcome."
+        )
+        soak_instruction = (
+            "Summarize the key benefits and timeline mentioned in this excerpt."
+        )
+
+        for prompt_data in final_suite["prompts"].values():
+            text = prompt_data["text"]
+            if prompt_data["tier"] == "short":
+                self.assertTrue(text.startswith("Summarize this event: "))
+            elif prompt_data["tier"] == "medium":
+                self.assertTrue(text.endswith(medium_instruction))
+            elif prompt_data["tier"] == "long":
+                self.assertTrue(text.endswith(long_instruction))
+            elif prompt_data["tier"] == "soak":
+                self.assertTrue(text.startswith("The following is a news excerpt. "))
+                self.assertTrue(text.endswith(soak_instruction))
+
+    def test_temporary_tokenizer_helper_not_committed(self):
+        """Temporary tokenizer code and dependencies must not remain in the harness."""
+        self.assertFalse(Path("scripts/precompute_tokens.py").exists())
+        requirements = Path("requirements.txt").read_text(encoding="utf-8").lower()
+        self.assertNotIn("transformers", requirements)
 
 
 class TestCliValidation(unittest.TestCase):
