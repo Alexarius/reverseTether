@@ -839,6 +839,8 @@ class TestCliValidation(unittest.TestCase):
                 "warm",
                 "--prompt-tier",
                 "short",
+                "--cache-policy",
+                "disabled",
                 "--mock",
             ],
         ):
@@ -846,6 +848,10 @@ class TestCliValidation(unittest.TestCase):
 
         self.assertEqual(run_mock.call_args.kwargs["prompt"], "Test prompt")
         self.assertEqual(run_mock.call_args.kwargs["prompt_id"], "short_smoke_v1")
+        config = run_mock.call_args.kwargs["config"]
+        self.assertEqual(config.suite_type, "smoke")
+        self.assertEqual(config.cache_policy, "disabled")
+        self.assertEqual(config.fixture_prompt_token_count, 37)
 
 
 class TestMatrixCliValidation(unittest.TestCase):
@@ -950,6 +956,8 @@ class TestMatrixCliValidation(unittest.TestCase):
                 "2",
                 "--prompt-tier",
                 "short",
+                "--cache-policy",
+                "disabled",
                 "--dry-run",
                 "--mock",  # Use mock to avoid hash validation
             ],
@@ -975,6 +983,9 @@ class TestMatrixCliValidation(unittest.TestCase):
             run_matrix_mock.call_args.kwargs["prompts"],
             [{"text": "Test prompt", "id": "short_smoke_v1"}],
         )
+        base_config = run_matrix_mock.call_args.kwargs["base_config"]
+        self.assertEqual(base_config.suite_type, "smoke")
+        self.assertEqual(base_config.cache_policy, "disabled")
 
     def test_run_matrix_rejects_short_prompt_for_soak_only_regime(self):
         """Matrix CLI should reject a normal prompt tier for soak-only runs."""

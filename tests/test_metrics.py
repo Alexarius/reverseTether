@@ -159,7 +159,7 @@ class TestRunRecord(unittest.TestCase):
         self.assertEqual(record.temperature, 0.0)
         self.assertEqual(record.max_new_tokens, 512)
         self.assertEqual(record.server_mode, "local")
-        self.assertEqual(record.suite_type, "")
+        self.assertEqual(record.suite_type, "unknown")
         self.assertEqual(record.cache_policy, "unknown")
         self.assertIsNone(record.fixture_prompt_token_count)
         self.assertIsNone(record.runtime_prompt_eval_token_count)

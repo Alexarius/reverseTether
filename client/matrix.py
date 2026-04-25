@@ -33,13 +33,18 @@ from .cli import (
 VALID_REGIMES = {"cold", "warm", "soak"}
 
 
-def build_config_from_args(args: argparse.Namespace) -> BenchmarkConfig:
+def build_config_from_args(
+    args: argparse.Namespace,
+    suite_type: str = "unknown",
+) -> BenchmarkConfig:
     """Build the base benchmark configuration for a matrix run."""
     return BenchmarkConfig(
         node=args.node,
         backend=args.backend,
         run_type="warm",
         prompt_tier=args.prompt_tier or "",
+        suite_type=suite_type,
+        cache_policy=args.cache_policy,
         host=args.host,
         port=args.port,
         server_mode=args.server_mode,
@@ -215,6 +220,11 @@ Examples:
         help="Path to prompt suite JSON"
     )
     parser.add_argument(
+        "--cache-policy",
+        default="unknown",
+        help="Cache handling policy for this matrix run (default: unknown)"
+    )
+    parser.add_argument(
         "--repetitions",
         type=int,
         default=5,
@@ -364,7 +374,11 @@ Examples:
         print(f"Error: Prompt selection '{e.args[0]}' not found in suite", file=sys.stderr)
         sys.exit(1)
 
-    base_config = build_config_from_args(args)
+    suite_type = suite.get("suite_type", "unknown")
+    base_config = build_config_from_args(
+        args,
+        suite_type=suite_type,
+    )
 
     try:
         validate_reproducibility_fields(base_config)

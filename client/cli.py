@@ -375,6 +375,11 @@ Mock mode:
         help="Path to prompt suite JSON"
     )
     parser.add_argument(
+        "--cache-policy",
+        default="unknown",
+        help="Cache handling policy for this run (default: unknown)"
+    )
+    parser.add_argument(
         "--repetitions",
         type=int,
         default=1,
@@ -511,6 +516,7 @@ Mock mode:
     except KeyError as e:
         print(f"Error: Prompt selection '{e.args[0]}' not found in suite", file=sys.stderr)
         sys.exit(1)
+    suite_type = suite.get("suite_type", "unknown")
     prompt_tiers_by_id = get_prompt_tier_by_id(suite)
 
     # Build configuration
@@ -519,6 +525,8 @@ Mock mode:
         backend=args.backend,
         run_type=args.run_type,
         prompt_tier=args.prompt_tier or "",
+        suite_type=suite_type,
+        cache_policy=args.cache_policy,
         host=args.host,
         port=args.port,
         server_mode=args.server_mode,
@@ -580,7 +588,11 @@ Mock mode:
     for prompt_obj in prompts:
         prompt_text = prompt_obj["text"]
         prompt_id = prompt_obj["id"]
-        prompt_config = replace(config, prompt_tier=prompt_tiers_by_id[prompt_id])
+        prompt_config = replace(
+            config,
+            prompt_tier=prompt_tiers_by_id[prompt_id],
+            fixture_prompt_token_count=prompt_obj.get("fixture_prompt_token_count"),
+        )
         if len(prompts) > 1:
             print(f"Prompt {prompt_id}...")
 

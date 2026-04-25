@@ -136,7 +136,7 @@ class RunRecord:
     backend: str  # cpu, opencl, npu_experimental
 
     # Fields with defaults below
-    suite_type: str = ""  # smoke, final_dataset
+    suite_type: str = "unknown"  # unknown, smoke, final_dataset
     cache_policy: str = "unknown"  # unknown, system_managed, cache_mismatch, cleared
     fixture_prompt_token_count: Optional[int] = None
     runtime_prompt_eval_token_count: Optional[int] = None

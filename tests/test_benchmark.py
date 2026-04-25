@@ -860,7 +860,7 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
             prompt_tier="short",
             suite_type="smoke",
             cache_policy="cache_mismatch",
-            fixture_prompt_token_count=37,
+            fixture_prompt_token_count=999,
             mock=True,
         )
         matrix_config = MatrixConfig(
@@ -871,7 +871,11 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
                 "short_smoke_v1": "short",
                 "soak_smoke_v1": "soak",
             },
-            soak_prompt={"text": "Soak prompt", "id": "soak_smoke_v1"},
+            soak_prompt={
+                "text": "Soak prompt",
+                "id": "soak_smoke_v1",
+                "fixture_prompt_token_count": 88,
+            },
             dry_run=False,
         )
 
@@ -879,7 +883,13 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
             output_dir = Path(temp_dir)
 
             run_matrix(
-                prompts=[{"text": "Test prompt", "id": "short_smoke_v1"}],
+                prompts=[
+                    {
+                        "text": "Test prompt",
+                        "id": "short_smoke_v1",
+                        "fixture_prompt_token_count": 37,
+                    }
+                ],
                 base_config=base_config,
                 matrix_config=matrix_config,
                 output_dir=output_dir,
@@ -905,17 +915,23 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
                 self.assertIn("cache_mismatch", record)
                 self.assertEqual(record["suite_type"], "smoke")
                 self.assertEqual(record["cache_policy"], "cache_mismatch")
-                self.assertEqual(record["fixture_prompt_token_count"], 37)
 
             records = [json.loads(line) for line in lines]
             self.assertEqual(
-                [(record["regime"], record["prompt_id"], record["prompt_tier"])
-                 for record in records],
                 [
-                    ("warm", "short_smoke_v1", "short"),
-                    ("warm", "short_smoke_v1", "short"),
-                    ("soak", "soak_smoke_v1", "soak"),
-                    ("soak", "soak_smoke_v1", "soak"),
+                    (
+                        record["regime"],
+                        record["prompt_id"],
+                        record["prompt_tier"],
+                        record["fixture_prompt_token_count"],
+                    )
+                    for record in records
+                ],
+                [
+                    ("warm", "short_smoke_v1", "short", 37),
+                    ("warm", "short_smoke_v1", "short", 37),
+                    ("soak", "soak_smoke_v1", "soak", 88),
+                    ("soak", "soak_smoke_v1", "soak", 88),
                 ],
             )
 
@@ -1137,8 +1153,16 @@ class TestMatrixRunner(unittest.TestCase):
 
             run_matrix(
                 prompts=[
-                    {"text": "Short prompt", "id": "prompt_short"},
-                    {"text": "Long prompt", "id": "prompt_long"},
+                    {
+                        "text": "Short prompt",
+                        "id": "prompt_short",
+                        "fixture_prompt_token_count": 123,
+                    },
+                    {
+                        "text": "Long prompt",
+                        "id": "prompt_long",
+                        "fixture_prompt_token_count": 1300,
+                    },
                 ],
                 base_config=base_config,
                 matrix_config=matrix_config,
@@ -1152,10 +1176,17 @@ class TestMatrixRunner(unittest.TestCase):
             ]
 
         self.assertEqual(
-            [(record["prompt_id"], record["prompt_tier"]) for record in records],
             [
-                ("prompt_short", "short"),
-                ("prompt_long", "long"),
+                (
+                    record["prompt_id"],
+                    record["prompt_tier"],
+                    record["fixture_prompt_token_count"],
+                )
+                for record in records
+            ],
+            [
+                ("prompt_short", "short", 123),
+                ("prompt_long", "long", 1300),
             ],
         )
 
@@ -1349,7 +1380,7 @@ class TestMatrixRunner(unittest.TestCase):
             prompt_tier="short",
             suite_type="smoke",
             cache_policy="system_managed",
-            fixture_prompt_token_count=37,
+            fixture_prompt_token_count=999,
             model_sha256=VALID_MODEL_SHA256,
             llama_cpp_commit=VALID_LLAMA_CPP_COMMIT,
             mock=False,
@@ -1391,7 +1422,13 @@ class TestMatrixRunner(unittest.TestCase):
 
             with patch("client.benchmark.stream_completion", side_effect=mock_stream):
                 results = run_matrix(
-                    prompts=[{"text": "Test prompt", "id": "short_smoke_v1"}],
+                    prompts=[
+                        {
+                            "text": "Test prompt",
+                            "id": "short_smoke_v1",
+                            "fixture_prompt_token_count": 37,
+                        }
+                    ],
                     base_config=base_config,
                     matrix_config=matrix_config,
                     output_dir=output_dir,

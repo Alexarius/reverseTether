@@ -51,7 +51,7 @@ class BenchmarkConfig:
     prompt_tier: str  # short, medium, long, soak
 
     # Prompt suite and cache metadata
-    suite_type: str = ""
+    suite_type: str = "unknown"
     cache_policy: str = "unknown"
     fixture_prompt_token_count: Optional[int] = None
 
@@ -904,6 +904,7 @@ def run_matrix(
         for prompt_obj in _prompts_for_regime(regime, prompts, matrix_config):
             prompt = prompt_obj["text"]
             prompt_id = prompt_obj["id"]
+            fixture_prompt_token_count = prompt_obj.get("fixture_prompt_token_count")
             if regime == "soak":
                 prompt_tier = "soak"
             else:
@@ -921,7 +922,7 @@ def run_matrix(
                     prompt_tier=prompt_tier,
                     suite_type=base_config.suite_type,
                     cache_policy=base_config.cache_policy,
-                    fixture_prompt_token_count=base_config.fixture_prompt_token_count,
+                    fixture_prompt_token_count=fixture_prompt_token_count,
                     host=base_config.host,
                     port=base_config.port,
                     server_mode=base_config.server_mode,
