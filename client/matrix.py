@@ -20,6 +20,7 @@ from .benchmark import (
     validate_reproducibility_fields,
 )
 from .cli import (
+    DEFAULT_PROMPT_SUITE_PATH,
     SOAK_PROMPT_TIER,
     get_prompt_tier_by_id,
     get_prompt_tier_for_id,
@@ -210,7 +211,7 @@ Examples:
         "--prompt-suite",
         dest="suite_path",
         type=Path,
-        default=Path("configs/prompts/smoke_suite.json"),
+        default=DEFAULT_PROMPT_SUITE_PATH,
         help="Path to prompt suite JSON"
     )
     parser.add_argument(
@@ -331,7 +332,11 @@ Examples:
         suite = load_prompt_suite(args.suite_path)
     except FileNotFoundError:
         print(f"Error: Prompt suite not found at {args.suite_path}", file=sys.stderr)
-        print("Ensure configs/prompts/smoke_suite.json exists.", file=sys.stderr)
+        print(
+            "Ensure configs/prompts/dataset_suite_v1.json exists, or pass "
+            "--suite-path configs/prompts/smoke_suite.json for smoke checks.",
+            file=sys.stderr,
+        )
         sys.exit(1)
     except json.JSONDecodeError as e:
         print(f"Error: Invalid JSON in prompt suite: {e}", file=sys.stderr)

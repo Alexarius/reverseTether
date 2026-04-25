@@ -112,7 +112,10 @@ These fields are mandatory for final dataset records and optional for smoke/deve
 | `dataset_name` | string | Dataset family used for the fixture, e.g., `cnn_dailymail` |
 | `dataset_split` | string | Dataset split or fixed offline partition, e.g., `validation` |
 | `dataset_source_id` | string | Stable source record ID or offline fixture source ID |
+| `source_article_sha256` | string | SHA-256 or placeholder identifier for the source article used to build the fixture |
 | `truncation_rule` | string | Rule used to shape the source text into the fixture prompt |
+| `prompt_fixture_sha256` | string | SHA-256 or placeholder identifier for the final prompt fixture text |
+| `tokenizer_runtime_used` | string | Tokenizer/runtime used to produce `fixture_prompt_token_count` |
 
 #### Prompt ID Versioning (Issue 09)
 
@@ -126,7 +129,7 @@ The smoke prompt suite uses a versioned ID format: `<tier>_smoke_v<N>` (e.g., `s
 **Rules:**
 1. Never modify prompt text without incrementing the version number
 2. Smoke prompt IDs must match the prompt tier prefix (e.g., `short_smoke_v1` for tier `short`)
-3. Smoke prompt definitions live in `configs/prompts/smoke_suite.json`; `configs/prompts/final_suite.json` is reserved for final dissertation prompts.
+3. Smoke prompt definitions live in `configs/prompts/smoke_suite.json`; final dissertation prompt definitions live in `configs/prompts/dataset_suite_v1.json`.
 
 #### Token Count Integrity (Issue 09 and Final Dataset Gate)
 
@@ -241,14 +244,17 @@ absent or `null`. Missing thermal data must not be replaced with guessed values.
   "stop_config": "eos_or_max_tokens",
   "prompt_id": "final_short_01",
   "prompt_tier": "short",
-  "fixture_prompt_token_count": 48,
-  "runtime_prompt_eval_token_count": 48,
-  "prompt_token_count": 48,
+  "fixture_prompt_token_count": 128,
+  "runtime_prompt_eval_token_count": 128,
+  "prompt_token_count": 128,
   "prompt_token_count_source": "llama_cpp_tokens_evaluated",
   "dataset_name": "cnn_dailymail",
   "dataset_split": "validation",
   "dataset_source_id": "fixed_offline_final_short_01",
+  "source_article_sha256": "placeholder_source_article_sha256_final_short_01",
   "truncation_rule": "fixed_offline_to_short_prompt",
+  "prompt_fixture_sha256": "placeholder_prompt_fixture_sha256_final_short_01",
+  "tokenizer_runtime_used": "placeholder_llama_3_2_1b_instruct_tokenizer",
   "generated_token_count": 87,
   "stop_reason": "eos",
   "request_sent_timestamp": "2026-03-25T14:30:52.123456",

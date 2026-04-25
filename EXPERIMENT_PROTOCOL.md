@@ -75,7 +75,7 @@ The project uses two prompt-suite roles:
 - **Smoke / development suite**: short engineering prompts used for CLI smoke checks, parser validation, and local harness development. These prompts are not final dissertation evidence.
 - **Final dataset suite**: dataset-backed prompts used for final evidence collection and dissertation claims.
 
-The smoke suite may be referred to as `smoke_suite_v1` and is currently materialized as `configs/prompts/smoke_suite.json`. The final dataset suite may be referred to as `dataset_suite_v1` and is currently materialized as `configs/prompts/final_suite.json`.
+The smoke suite may be referred to as `smoke_suite_v1` and is currently materialized as `configs/prompts/smoke_suite.json`. The final dataset suite may be referred to as `dataset_suite_v1` and is currently materialized as `configs/prompts/dataset_suite_v1.json`.
 
 Final claims must use records whose prompt metadata identifies the suite as `final_dataset`. Historical `short_v1` records and `_smoke_v1` records are excluded from final evidence unless a later decision log entry explicitly changes that rule.
 

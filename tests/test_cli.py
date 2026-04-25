@@ -19,6 +19,31 @@ from client.cli import (
 from client.matrix import main as matrix_main
 
 
+FINAL_DATASET_FIXTURE_METADATA_FIELDS = {
+    "dataset_name",
+    "dataset_split",
+    "dataset_source_id",
+    "source_article_sha256",
+    "truncation_rule",
+    "prompt_fixture_sha256",
+    "tokenizer_runtime_used",
+}
+
+FINAL_DATASET_TOKEN_RANGES = {
+    "short": (96, 160),
+    "medium": (480, 640),
+    "long": (1200, 1400),
+    "soak": (480, 640),
+}
+
+VALID_FINAL_DATASET_TOKEN_COUNTS = {
+    "short": 128,
+    "medium": 560,
+    "long": 1300,
+    "soak": 560,
+}
+
+
 class TestPromptSuiteLoading(unittest.TestCase):
     """Tests for prompt suite fixture loading.
 
@@ -81,7 +106,16 @@ class TestPromptSuiteValidation(unittest.TestCase):
                     "id": prompt_key,
                     "tier": tier,
                     "text": f"{tier} prompt {index}",
-                    "fixture_prompt_token_count": index,
+                    "fixture_prompt_token_count": VALID_FINAL_DATASET_TOKEN_COUNTS[tier],
+                    "dataset_name": "placeholder_cnn_dailymail",
+                    "dataset_split": "placeholder_validation",
+                    "dataset_source_id": f"placeholder_{prompt_key}",
+                    "source_article_sha256": f"placeholder_source_sha256_{prompt_key}",
+                    "truncation_rule": f"placeholder_fixed_{tier}_bucket_v1",
+                    "prompt_fixture_sha256": f"placeholder_fixture_sha256_{prompt_key}",
+                    "tokenizer_runtime_used": (
+                        "placeholder_llama_3_2_1b_instruct_tokenizer"
+                    ),
                 }
 
         return {
@@ -146,8 +180,27 @@ class TestPromptSuiteValidation(unittest.TestCase):
         """Final dataset suite must enforce exact tier bucket counts."""
         suite = self._valid_final_suite()
         suite["prompts"]["final_short_1"]["tier"] = "medium"
+        suite["prompts"]["final_short_1"]["fixture_prompt_token_count"] = (
+            VALID_FINAL_DATASET_TOKEN_COUNTS["medium"]
+        )
 
         with self.assertRaisesRegex(ValueError, "bucket counts"):
+            validate_prompt_suite(suite)
+
+    def test_final_suite_fixture_count_outside_bucket_range_fails_loudly(self):
+        """Final dataset fixture token counts must stay inside strict tier ranges."""
+        suite = self._valid_final_suite()
+        suite["prompts"]["final_short_1"]["fixture_prompt_token_count"] = 95
+
+        with self.assertRaisesRegex(ValueError, "bucket range"):
+            validate_prompt_suite(suite)
+
+    def test_final_suite_missing_fixture_metadata_fails_loudly(self):
+        """Final dataset prompts must include per-fixture dataset metadata."""
+        suite = self._valid_final_suite()
+        del suite["prompts"]["final_short_1"]["dataset_name"]
+
+        with self.assertRaisesRegex(ValueError, "metadata fields"):
             validate_prompt_suite(suite)
 
 
@@ -435,27 +488,28 @@ class TestRealPromptSuiteIntegrity(unittest.TestCase):
         # Soak ID should be versioned
         self.assertTrue(soak_data["id"].startswith("soak_smoke_v"))
 
-    def test_final_suite_exists_with_approved_bucket_structure(self):
-        """Final suite should be present with approved bucket structure."""
-        final_suite_path = Path("configs/prompts/final_suite.json")
-        self.assertTrue(final_suite_path.exists())
-        final_suite = load_prompt_suite(final_suite_path)
-        self.assertEqual(final_suite["suite_type"], "final_dataset")
-        self.assertIn("dataset_metadata", final_suite)
-        self.assertEqual(len(final_suite["prompts"]), 16)
+    def test_dataset_suite_exists_with_approved_bucket_structure(self):
+        """Dataset suite v1 should be present with approved bucket structure."""
+        dataset_suite_path = Path("configs/prompts/dataset_suite_v1.json")
+        self.assertFalse(Path("configs/prompts/final_suite.json").exists())
+        self.assertTrue(dataset_suite_path.exists())
+        dataset_suite = load_prompt_suite(dataset_suite_path)
+        self.assertEqual(dataset_suite["suite_type"], "final_dataset")
+        self.assertIn("dataset_metadata", dataset_suite)
+        self.assertEqual(len(dataset_suite["prompts"]), 16)
 
         bucket_counts = {"short": 0, "medium": 0, "long": 0, "soak": 0}
-        for prompt_data in final_suite["prompts"].values():
+        for prompt_data in dataset_suite["prompts"].values():
             bucket_counts[prompt_data["tier"]] += 1
             self.assertIs(type(prompt_data["fixture_prompt_token_count"]), int)
 
         self.assertEqual(bucket_counts, {"short": 5, "medium": 5, "long": 5, "soak": 1})
 
-    def test_final_suite_has_final_metadata(self):
-        """Final suite metadata should mark the fixture as approved final content."""
-        final_suite = load_prompt_suite(Path("configs/prompts/final_suite.json"))
+    def test_dataset_suite_has_final_metadata(self):
+        """Dataset suite metadata should mark the fixture as approved final content."""
+        dataset_suite = load_prompt_suite(Path("configs/prompts/dataset_suite_v1.json"))
         self.assertEqual(
-            final_suite["dataset_metadata"],
+            dataset_suite["dataset_metadata"],
             {
                 "status": "final",
                 "approval_state": "content approved; ready for final evidence",
@@ -465,17 +519,17 @@ class TestRealPromptSuiteIntegrity(unittest.TestCase):
                 "notes": "Dataset derived from CNN/DailyMail. Fixed offline.",
             },
         )
-        self.assertNotIn("stub", final_suite["description"].lower())
+        self.assertNotIn("stub", dataset_suite["description"].lower())
 
-    def test_final_suite_schema_shape_is_unchanged(self):
-        """Final suite must not add fields beyond the approved prompt schema."""
-        final_suite = load_prompt_suite(Path("configs/prompts/final_suite.json"))
+    def test_dataset_suite_schema_shape_matches_approved_metadata(self):
+        """Dataset suite prompts must include the approved fixture metadata schema."""
+        dataset_suite = load_prompt_suite(Path("configs/prompts/dataset_suite_v1.json"))
         self.assertEqual(
-            set(final_suite),
+            set(dataset_suite),
             {"version", "suite_type", "description", "dataset_metadata", "prompts"},
         )
         self.assertEqual(
-            set(final_suite["dataset_metadata"]),
+            set(dataset_suite["dataset_metadata"]),
             {
                 "status",
                 "approval_state",
@@ -483,31 +537,35 @@ class TestRealPromptSuiteIntegrity(unittest.TestCase):
                 "notes",
             },
         )
-        for prompt_data in final_suite["prompts"].values():
+        for prompt_data in dataset_suite["prompts"].values():
             self.assertEqual(
                 set(prompt_data),
-                {"id", "tier", "fixture_prompt_token_count", "description", "text"},
+                {
+                    "id",
+                    "tier",
+                    "fixture_prompt_token_count",
+                    "description",
+                    "text",
+                    *FINAL_DATASET_FIXTURE_METADATA_FIELDS,
+                },
             )
+            for field in FINAL_DATASET_FIXTURE_METADATA_FIELDS:
+                self.assertIsInstance(prompt_data[field], str)
+                self.assertTrue(prompt_data[field])
 
-    def test_final_suite_prompt_ids_and_token_count_bands(self):
-        """Final prompts should be versioned, distinct, and near approved token bands."""
+    def test_dataset_suite_prompt_ids_and_token_count_bands(self):
+        """Dataset prompts should be versioned, distinct, and in approved token bands."""
         import re
 
-        final_suite = load_prompt_suite(Path("configs/prompts/final_suite.json"))
+        dataset_suite = load_prompt_suite(Path("configs/prompts/dataset_suite_v1.json"))
         id_pattern = re.compile(r"^final_(short|medium|long|soak)_\d{2}$")
-        count_ranges = {
-            "short": (40, 70),
-            "medium": (450, 550),
-            "long": (1400, 1550),
-            "soak": (100, 140),
-        }
         texts = []
 
-        for prompt_key, prompt_data in final_suite["prompts"].items():
+        for prompt_key, prompt_data in dataset_suite["prompts"].items():
             prompt_id = prompt_data["id"]
             tier = prompt_data["tier"]
             count = prompt_data["fixture_prompt_token_count"]
-            low, high = count_ranges[tier]
+            low, high = FINAL_DATASET_TOKEN_RANGES[tier]
             self.assertEqual(prompt_key, prompt_id)
             self.assertRegex(prompt_id, id_pattern)
             self.assertGreaterEqual(count, low)
@@ -518,9 +576,9 @@ class TestRealPromptSuiteIntegrity(unittest.TestCase):
 
         self.assertEqual(len(texts), len(set(texts)))
 
-    def test_final_suite_prompt_patterns(self):
-        """Final prompts should match the approved tier-specific text patterns."""
-        final_suite = load_prompt_suite(Path("configs/prompts/final_suite.json"))
+    def test_dataset_suite_prompt_patterns(self):
+        """Dataset prompts should match the approved tier-specific text patterns."""
+        dataset_suite = load_prompt_suite(Path("configs/prompts/dataset_suite_v1.json"))
         medium_instruction = (
             "Summarize the main arguments and identify two key individuals mentioned "
             "in the article above."
@@ -533,7 +591,7 @@ class TestRealPromptSuiteIntegrity(unittest.TestCase):
             "Summarize the key benefits and timeline mentioned in this excerpt."
         )
 
-        for prompt_data in final_suite["prompts"].values():
+        for prompt_data in dataset_suite["prompts"].values():
             text = prompt_data["text"]
             if prompt_data["tier"] == "short":
                 self.assertTrue(text.startswith("Summarize this event: "))
@@ -698,7 +756,9 @@ class TestCliValidation(unittest.TestCase):
                 cli_main()
 
         self.assertEqual(exc.exception.code, 1)
-        load_suite_mock.assert_called_once_with(Path("configs/prompts/smoke_suite.json"))
+        load_suite_mock.assert_called_once_with(
+            Path("configs/prompts/dataset_suite_v1.json")
+        )
         create_dir_mock.assert_not_called()
         run_mock.assert_not_called()
 
@@ -773,7 +833,9 @@ class TestMatrixCliValidation(unittest.TestCase):
                 matrix_main()
 
         self.assertEqual(exc.exception.code, 1)
-        load_suite_mock.assert_called_once_with(Path("configs/prompts/smoke_suite.json"))
+        load_suite_mock.assert_called_once_with(
+            Path("configs/prompts/dataset_suite_v1.json")
+        )
 
     def test_run_matrix_dry_run_succeeds(self):
         """Matrix dry run should succeed without server connection."""
@@ -815,7 +877,9 @@ class TestMatrixCliValidation(unittest.TestCase):
             except SystemExit as e:
                 self.fail(f"Dry run should not exit with error, got code {e.code}")
 
-        load_suite_mock.assert_called_once_with(Path("configs/prompts/smoke_suite.json"))
+        load_suite_mock.assert_called_once_with(
+            Path("configs/prompts/dataset_suite_v1.json")
+        )
         create_dir_mock.assert_called_once()
         requested_output_dir = create_dir_mock.call_args[0][1]
         self.assertRegex(

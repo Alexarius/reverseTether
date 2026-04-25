@@ -26,9 +26,9 @@ The final methodology distinguishes two prompt suite roles:
 | Role | Canonical suite name | Current materialized file | Purpose | Final evidence? |
 |------|----------------------|---------------------------|---------|-----------------|
 | Development smoke suite | `smoke_suite_v1.json` | `configs/prompts/smoke_suite.json` | CLI smoke checks and implementation validation | No |
-| Dataset-backed final suite | `dataset_suite_v1.json` | `configs/prompts/final_suite.json` | Final dissertation evidence runs | Yes |
+| Dataset-backed final suite | `dataset_suite_v1.json` | `configs/prompts/dataset_suite_v1.json` | Final dissertation evidence runs | Yes |
 
-The final dataset suite is derived from CNN/DailyMail-style summarization fixtures and records stable prompt IDs, dataset metadata, truncation rules, and fixture token counts. The materialized file name may remain `final_suite.json` until a later code change renames loaders, but final analysis must treat it as the `dataset_suite_v1` methodology suite.
+The final dataset suite is derived from CNN/DailyMail-style summarization fixtures and records stable prompt IDs, dataset metadata, truncation rules, and fixture token counts. The materialized file name is `configs/prompts/dataset_suite_v1.json`.
 
 ## Result Sources
 

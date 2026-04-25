@@ -23,9 +23,27 @@ from .benchmark import (
 
 
 SOAK_PROMPT_TIER = "soak"
+SMOKE_SUITE_TYPE = "smoke"
+FINAL_DATASET_SUITE_TYPE = "final_dataset"
+DEFAULT_PROMPT_SUITE_PATH = Path("configs/prompts/dataset_suite_v1.json")
 FINAL_DATASET_BUCKET_COUNTS = {"short": 5, "medium": 5, "long": 5, "soak": 1}
+FINAL_DATASET_BUCKET_TOKEN_RANGES = {
+    "short": (96, 160),
+    "medium": (480, 640),
+    "long": (1200, 1400),
+    "soak": (480, 640),
+}
+FINAL_DATASET_FIXTURE_METADATA_FIELDS = {
+    "dataset_name",
+    "dataset_split",
+    "dataset_source_id",
+    "source_article_sha256",
+    "truncation_rule",
+    "prompt_fixture_sha256",
+    "tokenizer_runtime_used",
+}
 FINAL_PROMPT_TIERS = {"short", "medium", "long"}
-VALID_SUITE_TYPES = {"smoke", "final_dataset"}
+VALID_SUITE_TYPES = {SMOKE_SUITE_TYPE, FINAL_DATASET_SUITE_TYPE}
 
 
 def validate_prompt_suite(suite: dict) -> None:
@@ -53,7 +71,7 @@ def validate_prompt_suite(suite: dict) -> None:
             raise ValueError(f"Duplicate prompt id '{prompt_id}' in prompt suite")
         prompt_ids.add(prompt_id)
 
-    if suite_type != "final_dataset":
+    if suite_type != FINAL_DATASET_SUITE_TYPE:
         return
 
     dataset_metadata = suite.get("dataset_metadata")
@@ -75,6 +93,32 @@ def validate_prompt_suite(suite: dict) -> None:
                 f"Final dataset prompt '{prompt_key}' must use tier "
                 "'short', 'medium', 'long', or 'soak'"
             )
+        low, high = FINAL_DATASET_BUCKET_TOKEN_RANGES[tier]
+        if fixture_count < low or fixture_count > high:
+            raise ValueError(
+                f"Final dataset prompt '{prompt_key}' has "
+                f"fixture_prompt_token_count {fixture_count} outside "
+                f"the {tier} bucket range {low}-{high}"
+            )
+
+        missing_metadata_fields = sorted(
+            field
+            for field in FINAL_DATASET_FIXTURE_METADATA_FIELDS
+            if field not in prompt_data
+        )
+        if missing_metadata_fields:
+            raise ValueError(
+                f"Final dataset prompt '{prompt_key}' is missing required "
+                f"metadata fields: {', '.join(missing_metadata_fields)}"
+            )
+        for field in sorted(FINAL_DATASET_FIXTURE_METADATA_FIELDS):
+            value = prompt_data[field]
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(
+                    f"Final dataset prompt '{prompt_key}' must define "
+                    f"non-empty string metadata field '{field}'"
+                )
+
         bucket_counts[tier] += 1
 
     if bucket_counts != FINAL_DATASET_BUCKET_COUNTS:
@@ -335,7 +379,7 @@ Mock mode:
         "--prompt-suite",
         dest="suite_path",
         type=Path,
-        default=Path("configs/prompts/smoke_suite.json"),
+        default=DEFAULT_PROMPT_SUITE_PATH,
         help="Path to prompt suite JSON"
     )
     parser.add_argument(
@@ -447,7 +491,11 @@ Mock mode:
         suite = load_prompt_suite(args.suite_path)
     except FileNotFoundError:
         print(f"Error: Prompt suite not found at {args.suite_path}", file=sys.stderr)
-        print("Ensure configs/prompts/smoke_suite.json exists.", file=sys.stderr)
+        print(
+            "Ensure configs/prompts/dataset_suite_v1.json exists, or pass "
+            "--suite-path configs/prompts/smoke_suite.json for smoke checks.",
+            file=sys.stderr,
+        )
         sys.exit(1)
     except json.JSONDecodeError as e:
         print(f"Error: Invalid JSON in prompt suite: {e}", file=sys.stderr)

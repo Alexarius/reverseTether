@@ -8,9 +8,8 @@ Run configs, model metadata, and prompt suite definitions.
 configs/
   prompts/
     smoke_suite.json     # Current materialized smoke/development prompt suite
-    final_suite.json     # Current materialized dataset-backed final prompt suite
     smoke_suite_v1.json  # Canonical methodology name for smoke suite v1, if materialized
-    dataset_suite_v1.json # Canonical methodology name for final dataset suite v1, if materialized
+    dataset_suite_v1.json # Current materialized dataset-backed final prompt suite
   conditions/
     matrix.json          # Matrix run condition definitions
   server_metadata_schema.json  # Schema for server metadata validation
@@ -20,8 +19,8 @@ configs/
 
 Prompt suites are versioned JSON files containing prompts used by the benchmark harness. This ensures reproducibility and prevents prompt drift.
 
-- `prompts/smoke_suite.json`: development/smoke prompts used by CLI defaults. Methodology name: `smoke_suite_v1`.
-- `prompts/final_suite.json`: dataset-backed final dissertation benchmark prompts. Methodology name: `dataset_suite_v1`.
+- `prompts/smoke_suite.json`: development/smoke prompts used for explicit smoke checks. Methodology name: `smoke_suite_v1`.
+- `prompts/dataset_suite_v1.json`: dataset-backed final dissertation benchmark prompts. Methodology name: `dataset_suite_v1`.
 
 **Warning:** `short_v1` and any `_smoke_v1` prompt variants are not valid for final dissertation evidence.
 
@@ -30,7 +29,7 @@ Prompt suites are versioned JSON files containing prompts used by the benchmark 
 | Suite role | Suite type | Canonical methodology name | Current file | Use |
 |------------|------------|-----------------------------|--------------|-----|
 | Smoke / development | `smoke` | `smoke_suite_v1` | `prompts/smoke_suite.json` | CLI smoke checks and implementation validation |
-| Final dataset | `final_dataset` | `dataset_suite_v1` | `prompts/final_suite.json` | Final dissertation evidence |
+| Final dataset | `final_dataset` | `dataset_suite_v1` | `prompts/dataset_suite_v1.json` | Final dissertation evidence |
 
 Final aggregation must include only records from the final dataset suite. Smoke-suite records are development validation only.
 
@@ -54,7 +53,10 @@ Final aggregation must include only records from the final dataset suite. Smoke-
       "dataset_name": "cnn_dailymail",
       "dataset_split": "validation",
       "dataset_source_id": "<stable_source_record_id>",
+      "source_article_sha256": "<source_article_hash_or_placeholder>",
       "truncation_rule": "<documented_rule>",
+      "prompt_fixture_sha256": "<prompt_fixture_hash_or_placeholder>",
+      "tokenizer_runtime_used": "<tokenizer_runtime>",
       "description": "<purpose>",
       "text": "<prompt text>"
     }
@@ -81,7 +83,10 @@ Final dataset prompts must include:
 - `dataset_name`, such as `cnn_dailymail`.
 - `dataset_split`, such as `train`, `validation`, or `test`.
 - `dataset_source_id` that traces the fixture to the source dataset record or fixed offline source.
+- `source_article_sha256` for the selected source article or fixed offline placeholder.
 - `truncation_rule` describing how the source text was shortened or shaped.
+- `prompt_fixture_sha256` for the final prompt fixture text or fixed offline placeholder.
+- `tokenizer_runtime_used` naming the tokenizer/runtime used for fixture counts.
 - Full prompt `text` as sent to the benchmark client.
 
 The fixture token count is metadata for reproducibility and cache detection. Runtime prompt evaluation must still be recorded separately from the server response.
