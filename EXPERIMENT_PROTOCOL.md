@@ -68,6 +68,17 @@ If GPU/OpenCL or NPU requires a different quantization or runtime format, treat 
 
 Use the same prompt suite across all comparable conditions.
 
+### Suite types
+
+The project uses two prompt-suite roles:
+
+- **Smoke / development suite**: short engineering prompts used for CLI smoke checks, parser validation, and local harness development. These prompts are not final dissertation evidence.
+- **Final dataset suite**: dataset-backed prompts used for final evidence collection and dissertation claims.
+
+The smoke suite may be referred to as `smoke_suite_v1` and is currently materialized as `configs/prompts/smoke_suite.json`. The final dataset suite may be referred to as `dataset_suite_v1` and is currently materialized as `configs/prompts/final_suite.json`.
+
+Final claims must use records whose prompt metadata identifies the suite as `final_dataset`. Historical `short_v1` records and `_smoke_v1` records are excluded from final evidence unless a later decision log entry explicitly changes that rule.
+
 ### Minimum prompt categories
 - **Short prompt**: representative of light interactive use.
 - **Medium prompt**: representative of normal use.
@@ -77,13 +88,25 @@ Use the same prompt suite across all comparable conditions.
 ### Prompt suite rules
 - Prompt text must be versioned in the repo.
 - Prompt token counts must be recorded from the runtime/tooling, not guessed manually.
+- Dataset-backed final fixtures must also record a fixed `fixture_prompt_token_count` for auditing the selected prompt text.
 - Do not change prompt wording mid-series without versioning the suite.
 - Keep the soak workload fixed.
+
+### Prompt token count fields
+
+Final records must distinguish static fixture metadata from runtime measurement:
+
+- `fixture_prompt_token_count`: the precomputed token count stored with the fixture. This identifies the intended full prompt size and helps detect prompt drift.
+- `runtime_prompt_eval_token_count`: the count reported by the runtime for the actual request, equivalent to the server-side prompt evaluation count.
+
+`fixture_prompt_token_count` must never replace the runtime count in metric computation. Decode TPS continues to use generated output tokens over the decode window only.
+
+If the runtime prompt evaluation count is unexpectedly lower than the fixture count for the same prompt, treat the run as a cache/state mismatch until proven otherwise.
 
 ## Operating regimes
 
 ### Cold start
-Captures server launch and model load cost.
+Captures the first measured request after a fresh server process launch. Each cold repetition requires a server restart before the measured prompt. Any server startup or model-load duration must be recorded separately from TTFT unless a new metric is approved in `DECISION_LOG.md`.
 
 ### Warm start
 Captures normal interactive use with the model already resident.
@@ -170,6 +193,21 @@ Each run record **must** contain the following fields. Records missing mandatory
 - Same model and quantization across comparable runs unless explicitly documented otherwise.
 - No hidden warm caches or preparation steps that exist in only one condition.
 - Manual intervention must be recorded.
+
+## Cache policy and acceptance gate
+
+Final evidence must use a controlled cache policy. The benchmark must either disable prompt/KV cache reuse for measured requests or clear cache state by a documented server restart where that is compatible with the regime.
+
+Final records must include:
+
+- `cache_policy`
+- `cache_expected`
+- `cache_observed`
+- `cache_mismatch`
+
+For accepted final records, `cache_expected` must be `false`, `cache_observed` must be `false`, and `cache_mismatch` must be `false`.
+
+Cache mismatch detection is an acceptance gate. If cache reuse is observed, suspected from runtime prompt evaluation counts, or cannot be verified, the affected record is development-only and excluded from final dissertation claims.
 
 ## Success interpretation
 

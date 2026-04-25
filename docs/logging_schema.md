@@ -55,8 +55,14 @@ These fields are required for valid benchmark comparisons per DECISION_LOG.md DL
 | `node` | string | Node identifier: `yoga` or `s25ultra` |
 | `backend` | string | Backend: `cpu`, `opencl`, `npu_experimental` |
 | `server_mode` | string | Server location: `local` or `phone` |
-| `suite_type` | string | Prompt suite category, e.g., `smoke` or `final_dataset`; defaults to empty for older/manual records |
-| `cache_policy` | string | Cache handling policy for the run; defaults to `unknown`, with `system_managed`, `cache_mismatch`, and `cleared` reserved for later cache-control slices |
+| `prompt_suite_id` | string | Stable suite identifier, e.g., `smoke_suite_v1` or `dataset_suite_v1` |
+| `prompt_suite_version` | string | Version of the prompt suite, e.g., `1.0.0` |
+| `prompt_suite_type` | string | Prompt suite category: `smoke` or `final_dataset` |
+| `suite_type` | string | Legacy alias for `prompt_suite_type`; may appear in older records |
+| `cache_policy` | string | Cache handling policy, e.g., `disabled`, `cleared_by_restart`, `unknown`, or `unsupported_unverified` |
+| `cache_expected` | boolean | Whether prompt/KV cache reuse was expected for this measured request; must be `false` for final evidence |
+| `cache_observed` | boolean | Whether prompt/KV cache reuse was observed or inferred from runtime prompt evaluation counts |
+| `cache_mismatch` | boolean | Whether expected and observed cache behavior disagree; must be `false` for final evidence |
 
 ### Device/Runtime Metadata
 
@@ -91,9 +97,22 @@ These fields are required for valid benchmark comparisons per DECISION_LOG.md DL
 | `prompt_id` | string | Versioned identifier for the prompt (e.g., `short_smoke_v1`) |
 | `prompt_tier` | string | `short`, `medium`, `long`, or `soak` |
 | `fixture_prompt_token_count` | integer \| null | Static prompt-suite metadata for the fixture prompt token count. This is separate from dynamic `prompt_token_count` and must not replace the runtime-reported count. |
-| `prompt_token_count` | integer \| null | Prompt tokens from server's `tokens_evaluated` |
+| `runtime_prompt_eval_token_count` | integer \| null | Prompt tokens evaluated by the runtime for this request, from server `tokens_evaluated` |
+| `prompt_token_count` | integer \| null | Legacy alias for runtime prompt evaluation count in older records |
+| `prompt_token_count_source` | string | Source of runtime prompt count, e.g., `llama_cpp_tokens_evaluated` |
 | `generated_token_count` | integer | Number of tokens generated |
 | `stop_reason` | string | Why generation stopped |
+
+### Dataset Metadata Fields
+
+These fields are mandatory for final dataset records and optional for smoke/development records.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `dataset_name` | string | Dataset family used for the fixture, e.g., `cnn_dailymail` |
+| `dataset_split` | string | Dataset split or fixed offline partition, e.g., `validation` |
+| `dataset_source_id` | string | Stable source record ID or offline fixture source ID |
+| `truncation_rule` | string | Rule used to shape the source text into the fixture prompt |
 
 #### Prompt ID Versioning (Issue 09)
 
@@ -109,12 +128,17 @@ The smoke prompt suite uses a versioned ID format: `<tier>_smoke_v<N>` (e.g., `s
 2. Smoke prompt IDs must match the prompt tier prefix (e.g., `short_smoke_v1` for tier `short`)
 3. Smoke prompt definitions live in `configs/prompts/smoke_suite.json`; `configs/prompts/final_suite.json` is reserved for final dissertation prompts.
 
-#### Token Count Integrity (Issue 09)
+#### Token Count Integrity (Issue 09 and Final Dataset Gate)
 
-**Critical**: `prompt_token_count` must be recorded from the llama.cpp server response, never guessed.
-`fixture_prompt_token_count` is static suite metadata only; it can help audit the
-selected fixture, but it is not a measurement and must not be used for dynamic
-runtime token accounting.
+**Critical**: runtime prompt token counts must be recorded from the llama.cpp server response, never guessed.
+`fixture_prompt_token_count` is static suite metadata only; it can help audit the selected fixture, but it is not a measurement and must not be used for dynamic runtime token accounting.
+
+For final dataset records:
+
+- `fixture_prompt_token_count` records the full fixture token count.
+- `runtime_prompt_eval_token_count` records the runtime-evaluated prompt tokens.
+- `prompt_token_count_source` should be `llama_cpp_tokens_evaluated`.
+- `prompt_token_count` may be retained as a compatibility alias, but final analysis should prefer `runtime_prompt_eval_token_count`.
 
 The client captures this from the `tokens_evaluated` field in the server's final SSE event:
 
@@ -126,6 +150,21 @@ The client captures this from the `tokens_evaluated` field in the server's final
 - Different tokenizers produce different counts for identical text
 - Guessed counts (e.g., word splitting) break decode TPS comparability across models
 - The server knows the exact prompt tokens after parsing the full context
+
+If `runtime_prompt_eval_token_count` is unexpectedly lower than `fixture_prompt_token_count`, the record may have reused prompt/KV cache state and must set `cache_mismatch=true` or be excluded from final evidence.
+
+#### Cache Policy Integrity
+
+Final evidence records must explicitly describe cache behavior:
+
+| Field | Accepted final value | Reason |
+|-------|----------------------|--------|
+| `cache_policy` | `disabled` or regime-compatible `cleared_by_restart` | Documents how cache reuse was prevented |
+| `cache_expected` | `false` | Final evidence expects full prompt evaluation |
+| `cache_observed` | `false` | Runtime counts must not indicate cache reuse |
+| `cache_mismatch` | `false` | Mismatched cache state is an acceptance failure |
+
+Records with `cache_mismatch=true`, missing cache fields, or unverifiable cache behavior are development-only.
 
 ### Timing Metadata
 
@@ -176,8 +215,14 @@ absent or `null`. Missing thermal data must not be replaced with guessed values.
   "node": "yoga",
   "backend": "cpu",
   "server_mode": "local",
-  "suite_type": "smoke",
-  "cache_policy": "unknown",
+  "prompt_suite_id": "dataset_suite_v1",
+  "prompt_suite_version": "1.0.0",
+  "prompt_suite_type": "final_dataset",
+  "suite_type": "final_dataset",
+  "cache_policy": "disabled",
+  "cache_expected": false,
+  "cache_observed": false,
+  "cache_mismatch": false,
   "laptop_identifier": "yoga_slim7_14are05",
   "phone_identifier": "",
   "os_build_metadata": "Windows 11 Education 10.0.26200",
@@ -194,10 +239,16 @@ absent or `null`. Missing thermal data must not be replaced with guessed values.
   "temperature": 0.0,
   "max_new_tokens": 512,
   "stop_config": "eos_or_max_tokens",
-  "prompt_id": "short_smoke_v1",
+  "prompt_id": "final_short_01",
   "prompt_tier": "short",
-  "fixture_prompt_token_count": null,
-  "prompt_token_count": 45,
+  "fixture_prompt_token_count": 48,
+  "runtime_prompt_eval_token_count": 48,
+  "prompt_token_count": 48,
+  "prompt_token_count_source": "llama_cpp_tokens_evaluated",
+  "dataset_name": "cnn_dailymail",
+  "dataset_split": "validation",
+  "dataset_source_id": "fixed_offline_final_short_01",
+  "truncation_rule": "fixed_offline_to_short_prompt",
   "generated_token_count": 87,
   "stop_reason": "eos",
   "request_sent_timestamp": "2026-03-25T14:30:52.123456",
@@ -269,11 +320,11 @@ python -c "import json; [json.loads(line) for line in open('results/YYYYMMDD_HHM
 
 ### Prompt Metadata Verification (Issue 09)
 
-To verify prompt_id and prompt_token_count are properly logged:
+To verify prompt suite metadata and runtime prompt token counts are properly logged:
 
 ```bash
-# Check that prompt_id and prompt_token_count exist in JSONL records
-grep -E '"prompt_id"|"prompt_token_count"' results/<latest_run_dir>/raw_metrics.jsonl
+# Check that prompt and cache metadata exist in JSONL records
+grep -E '"prompt_id"|"prompt_suite_type"|"runtime_prompt_eval_token_count"|"cache_mismatch"' results/<latest_run_dir>/raw_metrics.jsonl
 
 # Verify prompt_id matches expected format
 python -c "
@@ -282,10 +333,10 @@ with open('results/<run_dir>/raw_metrics.jsonl') as f:
     for line in f:
         record = json.loads(line)
         assert 'prompt_id' in record, 'Missing prompt_id'
-        assert 'prompt_token_count' in record, 'Missing prompt_token_count'
-        # prompt_id should be versioned (e.g., short_smoke_v1)
-        assert '_v' in record['prompt_id'], f'Invalid prompt_id format: {record[\"prompt_id\"]}'
-        print(f'OK: prompt_id={record[\"prompt_id\"]}, prompt_token_count={record[\"prompt_token_count\"]}')
+        assert 'prompt_suite_type' in record, 'Missing prompt_suite_type'
+        assert 'runtime_prompt_eval_token_count' in record, 'Missing runtime prompt count'
+        assert record.get('cache_mismatch') is False, 'Cache mismatch excludes final evidence'
+        print(f'OK: prompt_id={record[\"prompt_id\"]}, runtime_prompt_eval_token_count={record[\"runtime_prompt_eval_token_count\"]}')
 "
 ```
 
@@ -306,3 +357,4 @@ pytest tests/test_cli.py -k "prompt" -v
 | 1.0.0 | 2026-03-25 | Initial schema with mandatory reproducibility fields |
 | 1.1.0 | 2026-04-20 | Documented optional pre/post thermal, battery, and anomaly context fields for Issue 11 |
 | 1.2.0 | 2026-04-25 | Added prompt suite type, cache policy, and static fixture prompt token count metadata |
+| 1.3.0 | 2026-04-25 | Added final dataset metadata, runtime prompt count, and cache mismatch acceptance fields |

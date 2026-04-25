@@ -176,6 +176,107 @@ Human reviewer via approved plan slice
 
 ---
 
+## DL-20260425-02: Exclude Historical Short-Prompt Results from Final Claims
+
+### Decision ID
+`DL-20260425-02`
+
+### Date
+2026-04-25
+
+### Decision
+Historical short-prompt results are excluded from final dissertation claims and retained only as development validation evidence.
+
+### Context
+Existing result folders contain early records using prompt IDs such as `short_v1`. Some repeated records show runtime prompt evaluation counts that are much smaller than the full prompt count, which indicates prompt-cache or server-state contamination risk. These runs were useful for proving the harness and hardware path, but they do not satisfy the final dataset or cache-control methodology.
+
+### Options considered
+- Option A: Include historical short-prompt results in final claims with caveats.
+- Option B: Keep the historical results for audit but exclude them from final claims and default final aggregation.
+- Option C: Delete the historical result folders.
+
+### Chosen option
+Option B: Preserve the historical data but exclude it from final claims.
+
+### Why this option was chosen
+It protects measurement integrity without hiding development evidence. The raw logs remain auditable, while final claims are based only on dataset-backed fixtures with explicit cache policy metadata.
+
+### Impact on methodology
+- TTFT semantics? No change.
+- Decode TPS semantics? No change.
+- Prompt comparability? Strengthened by separating short development prompts from final dataset prompts.
+- Model/quantization comparability? No change.
+- Run regimes? No change.
+- Raw logging? Preserved; no raw logs are removed.
+- Dissertation claims? Restricted to final dataset records that pass acceptance gates.
+
+### Implementation impact
+- `FINAL_RUN_MANIFEST.md`: Lists excluded historical result folders.
+- `results/README.md`: Marks historical short-prompt folders as development-only.
+- Final aggregation: Must filter historical short-prompt and smoke-suite records by default.
+
+### Risks introduced
+The final evidence set may be smaller until new final dataset runs are collected.
+
+### Follow-up actions
+Run the final dataset suite under the approved cache policy before making performance claims.
+
+### Approved by
+Human reviewer via PR 7 plan
+
+---
+
+## DL-20260425-03: Adopt Dataset-Backed Final Fixtures and Cache Gates
+
+### Decision ID
+`DL-20260425-03`
+
+### Date
+2026-04-25
+
+### Decision
+Final evidence uses dataset-backed prompt fixtures with explicit fixture token counts, runtime prompt evaluation counts, dataset metadata, and cache mismatch acceptance gates.
+
+### Context
+The project needs final prompts that are reproducible, supervisor-readable, and more representative than short smoke prompts. It also needs a way to detect prompt-cache reuse so TTFT and prompt evaluation comparisons are not contaminated by hidden server state.
+
+### Options considered
+- Option A: Continue using smoke prompts and rely on runtime prompt token counts only.
+- Option B: Adopt dataset-backed final fixtures and add explicit cache/token-count acceptance metadata.
+- Option C: Use external dataset records dynamically during each benchmark run.
+
+### Chosen option
+Option B: Dataset-backed fixtures with explicit cache and token-count gates.
+
+### Why this option was chosen
+Fixed dataset-backed fixtures preserve reproducibility while providing realistic prompt lengths. Separating `fixture_prompt_token_count` from `runtime_prompt_eval_token_count` allows final analysis to detect cache reuse without changing TTFT or decode TPS definitions.
+
+### Impact on methodology
+- TTFT semantics? No change.
+- Decode TPS semantics? No change.
+- Prompt comparability? Strengthened through stable final prompt IDs and suite metadata.
+- Model/quantization comparability? No change.
+- Run regimes? Preserved, with true cold runs requiring server restarts.
+- Raw logging? Expanded with prompt suite, dataset, runtime token count, and cache fields.
+- Dissertation claims? Must be based only on final dataset records where `cache_mismatch=false`.
+
+### Implementation impact
+- `EXPERIMENT_PROTOCOL.md`: Documents smoke vs final dataset suites and cache acceptance gates.
+- `configs/README.md`: Documents dataset-backed fixture requirements.
+- `docs/logging_schema.md`: Documents new prompt suite, dataset, runtime token count, and cache fields.
+- `FINAL_RUN_MANIFEST.md`: Defines final run procedure and acceptance gates.
+
+### Risks introduced
+If the runtime cannot disable or verify prompt-cache behavior for warm and soak regimes, those records cannot be accepted as final evidence until cache handling is fixed or independently verified.
+
+### Follow-up actions
+Collect final dataset runs after confirming cache policy behavior and preserving raw logs.
+
+### Approved by
+Human reviewer via PR 7 plan
+
+---
+
 ## DL-20260322-02: Mandatory Q4_0 Quantization
 
 ### Decision ID
