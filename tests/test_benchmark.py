@@ -80,7 +80,7 @@ class TestBenchmarkLogging(unittest.TestCase):
             ), patch("client.benchmark.uuid.uuid4", return_value="test-run-id"):
                 record = run_benchmark(
                     prompt="Test prompt",
-                    prompt_id="short_v1",
+                    prompt_id="short_smoke_v1",
                     config=config,
                     output_dir=output_dir,
                     repetition_index=0,
@@ -444,7 +444,7 @@ class TestReproducibilityValidation(unittest.TestCase):
             "client.benchmark.stream_completion"
         ) as stream_mock:
             with self.assertRaisesRegex(ValueError, "model_sha256"):
-                run_benchmark(prompt="Test", prompt_id="short_v1", config=config)
+                run_benchmark(prompt="Test", prompt_id="short_smoke_v1", config=config)
 
         create_dir_mock.assert_not_called()
         stream_mock.assert_not_called()
@@ -464,7 +464,7 @@ class TestReproducibilityValidation(unittest.TestCase):
             "client.benchmark.stream_completion"
         ) as stream_mock:
             with self.assertRaisesRegex(ValueError, "llama_cpp_commit"):
-                run_benchmark(prompt="Test", prompt_id="short_v1", config=config)
+                run_benchmark(prompt="Test", prompt_id="short_smoke_v1", config=config)
 
         create_dir_mock.assert_not_called()
         stream_mock.assert_not_called()
@@ -498,7 +498,7 @@ class TestReproducibilityValidation(unittest.TestCase):
             ), patch("client.benchmark.uuid.uuid4", return_value="test-run-id"):
                 record = run_benchmark(
                     prompt="Test prompt",
-                    prompt_id="short_v1",
+                    prompt_id="short_smoke_v1",
                     config=config,
                     output_dir=output_dir,
                 )
@@ -548,7 +548,7 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
             ), patch("client.benchmark.uuid.uuid4", return_value="test-run-id"):
                 run_benchmark(
                     prompt="Test prompt",
-                    prompt_id="short_v1",
+                    prompt_id="short_smoke_v1",
                     config=config,
                     output_dir=output_dir,
                 )
@@ -557,7 +557,7 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
             record = json.loads(metrics_file.read_text(encoding="utf-8").strip())
 
             self.assertIn("prompt_id", record)
-            self.assertEqual(record["prompt_id"], "short_v1")
+            self.assertEqual(record["prompt_id"], "short_smoke_v1")
 
     def test_jsonl_contains_prompt_token_count_from_server(self):
         """prompt_token_count must come from server metadata, not guessed."""
@@ -591,7 +591,7 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
             ), patch("client.benchmark.uuid.uuid4", return_value="test-run-id"):
                 run_benchmark(
                     prompt="Test prompt",
-                    prompt_id="medium_v1",
+                    prompt_id="medium_smoke_v1",
                     config=config,
                     output_dir=output_dir,
                 )
@@ -637,7 +637,7 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
             ), patch("client.benchmark.uuid.uuid4", return_value="test-run-id"):
                 run_benchmark(
                     prompt="Test prompt",
-                    prompt_id="medium_v1",
+                    prompt_id="medium_smoke_v1",
                     config=config,
                     output_dir=output_dir,
                 )
@@ -680,7 +680,7 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
             ), patch("client.benchmark.uuid.uuid4", return_value="test-run-id"):
                 run_benchmark(
                     prompt="Test prompt",
-                    prompt_id="short_v1",
+                    prompt_id="short_smoke_v1",
                     config=config,
                     output_dir=output_dir,
                 )
@@ -722,7 +722,7 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
             ), patch("client.benchmark.uuid.uuid4", return_value="test-run-id"):
                 run_benchmark(
                     prompt="Soak test prompt",
-                    prompt_id="soak_v1",
+                    prompt_id="soak_smoke_v1",
                     config=config,
                     output_dir=output_dir,
                 )
@@ -754,7 +754,7 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
 
             run_matrix(
                 prompt="Test prompt",
-                prompt_id="short_v1",
+                prompt_id="short_smoke_v1",
                 base_config=base_config,
                 matrix_config=matrix_config,
                 output_dir=output_dir,
@@ -772,7 +772,7 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
                 self.assertIn("prompt_token_count", record)
                 self.assertIn("prompt_tier", record)
                 # prompt_id should match what was passed
-                self.assertEqual(record["prompt_id"], "short_v1")
+                self.assertEqual(record["prompt_id"], "short_smoke_v1")
 
 
 class TestMatrixRunner(unittest.TestCase):
@@ -806,7 +806,7 @@ class TestMatrixRunner(unittest.TestCase):
 
             results = run_matrix(
                 prompt="Test prompt",
-                prompt_id="short_v1",
+                prompt_id="short_smoke_v1",
                 base_config=base_config,
                 matrix_config=matrix_config,
                 output_dir=output_dir,
@@ -841,7 +841,7 @@ class TestMatrixRunner(unittest.TestCase):
 
             results = run_matrix(
                 prompt="Test prompt",
-                prompt_id="short_v1",
+                prompt_id="short_smoke_v1",
                 base_config=base_config,
                 matrix_config=matrix_config,
                 output_dir=output_dir,
@@ -890,7 +890,7 @@ class TestMatrixRunner(unittest.TestCase):
 
             results = run_matrix(
                 prompt="Test prompt",
-                prompt_id="short_v1",
+                prompt_id="short_smoke_v1",
                 base_config=base_config,
                 matrix_config=matrix_config,
                 output_dir=output_dir,
@@ -931,7 +931,7 @@ class TestMatrixRunner(unittest.TestCase):
 
             run_matrix(
                 prompt="Test prompt",
-                prompt_id="soak_v1",
+                prompt_id="soak_smoke_v1",
                 base_config=base_config,
                 matrix_config=matrix_config,
                 output_dir=output_dir,
@@ -971,7 +971,7 @@ class TestMatrixRunner(unittest.TestCase):
 
             results = run_matrix(
                 prompt="Test prompt",
-                prompt_id="short_v1",
+                prompt_id="short_smoke_v1",
                 base_config=base_config,
                 matrix_config=matrix_config,
                 output_dir=output_dir,
@@ -1020,7 +1020,7 @@ class TestMatrixRunner(unittest.TestCase):
 
             run_matrix(
                 prompt="Test prompt",
-                prompt_id="short_v1",
+                prompt_id="short_smoke_v1",
                 base_config=base_config,
                 matrix_config=matrix_config,
                 output_dir=output_dir,
@@ -1087,7 +1087,7 @@ class TestMatrixRunner(unittest.TestCase):
             with patch("client.benchmark.stream_completion", side_effect=mock_stream):
                 results = run_matrix(
                     prompt="Test prompt",
-                    prompt_id="short_v1",
+                    prompt_id="short_smoke_v1",
                     base_config=base_config,
                     matrix_config=matrix_config,
                     output_dir=output_dir,

@@ -123,8 +123,10 @@ Examples:
     )
     parser.add_argument(
         "--suite-path",
+        "--prompt-suite",
+        dest="suite_path",
         type=Path,
-        default=Path("configs/prompts/suite.json"),
+        default=Path("configs/prompts/smoke_suite.json"),
         help="Path to prompt suite JSON"
     )
     parser.add_argument(
@@ -245,7 +247,7 @@ Examples:
         suite = load_prompt_suite(args.suite_path)
     except FileNotFoundError:
         print(f"Error: Prompt suite not found at {args.suite_path}", file=sys.stderr)
-        print("Ensure configs/prompts/suite.json exists.", file=sys.stderr)
+        print("Ensure configs/prompts/smoke_suite.json exists.", file=sys.stderr)
         sys.exit(1)
     except json.JSONDecodeError as e:
         print(f"Error: Invalid JSON in prompt suite: {e}", file=sys.stderr)

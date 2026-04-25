@@ -125,6 +125,57 @@ Human reviewer (pending)
 
 ---
 
+## DL-20260425-01: Separate Smoke and Final Prompt Suites
+
+### Decision ID
+`DL-20260425-01`
+
+### Date
+2026-04-25
+
+### Decision
+The existing development prompt suite is renamed and marked as `smoke_suite.json`, while `final_suite.json` is reserved for final dissertation benchmark prompts.
+
+### Context
+The initial prompt fixture was useful for smoke testing, but its IDs and filename did not clearly distinguish development prompts from final dissertation evidence.
+
+### Options considered
+- Option A: Keep a single `suite.json` for all prompt usage.
+- Option B: Rename the current fixture to `smoke_suite.json` and reserve a separate final suite.
+- Option C: Replace the current prompts with final prompts immediately.
+
+### Chosen option
+Option B: Separate smoke/development prompts from final benchmark prompts.
+
+### Why this option was chosen
+This preserves existing CLI smoke behavior while preventing development prompts from being mistaken for final dissertation evidence.
+
+### Impact on methodology
+- TTFT semantics? No change.
+- Decode TPS semantics? No change.
+- Prompt comparability? Preserved for smoke runs by keeping tiers and prompt text unchanged; final evidence requires the future final suite.
+- Model/quantization comparability? No change.
+- Run regimes? No change.
+- Raw logging? Preserved; only prompt ID strings change to include `_smoke_v1`.
+- Dissertation claims? Strengthened by explicitly excluding smoke prompts from final evidence.
+
+### Implementation impact
+- `configs/prompts/smoke_suite.json`: renamed current prompt fixture and updated IDs.
+- `configs/prompts/final_suite.json`: added reserved placeholder.
+- CLI defaults now point to the smoke suite.
+- Documentation and tests now reflect smoke prompt IDs.
+
+### Risks introduced
+Historical raw logs using `short_v1`, `medium_v1`, `long_v1`, or `soak_v1` must not be mixed with new `_smoke_v1` logs without explicit mapping.
+
+### Follow-up actions
+Define, approve, and record the final dissertation prompt suite before collecting final evidence.
+
+### Approved by
+Human reviewer via approved plan slice
+
+---
+
 ## DL-20260322-02: Mandatory Q4_0 Quantization
 
 ### Decision ID

@@ -86,7 +86,7 @@ These fields are required for valid benchmark comparisons per DECISION_LOG.md DL
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `prompt_id` | string | Versioned identifier for the prompt (e.g., `short_v1`) |
+| `prompt_id` | string | Versioned identifier for the prompt (e.g., `short_smoke_v1`) |
 | `prompt_tier` | string | `short`, `medium`, `long`, or `soak` |
 | `prompt_token_count` | integer \| null | Prompt tokens from server's `tokens_evaluated` |
 | `generated_token_count` | integer | Number of tokens generated |
@@ -94,7 +94,7 @@ These fields are required for valid benchmark comparisons per DECISION_LOG.md DL
 
 #### Prompt ID Versioning (Issue 09)
 
-The `prompt_id` field uses a versioned format: `<tier>_v<N>` (e.g., `short_v1`, `medium_v2`).
+The smoke prompt suite uses a versioned ID format: `<tier>_smoke_v<N>` (e.g., `short_smoke_v1`, `medium_smoke_v1`).
 
 **Why this matters:**
 - Prevents **prompt drift** — changing prompt wording without tracking invalidates historical comparisons
@@ -103,8 +103,8 @@ The `prompt_id` field uses a versioned format: `<tier>_v<N>` (e.g., `short_v1`, 
 
 **Rules:**
 1. Never modify prompt text without incrementing the version number
-2. The prompt_id must match the prompt tier prefix (e.g., `short_v1` for tier `short`)
-3. All prompt definitions live in `configs/prompts/suite.json`
+2. Smoke prompt IDs must match the prompt tier prefix (e.g., `short_smoke_v1` for tier `short`)
+3. Smoke prompt definitions live in `configs/prompts/smoke_suite.json`; `configs/prompts/final_suite.json` is reserved for final dissertation prompts.
 
 #### Token Count Integrity (Issue 09)
 
@@ -186,7 +186,7 @@ absent or `null`. Missing thermal data must not be replaced with guessed values.
   "temperature": 0.0,
   "max_new_tokens": 512,
   "stop_config": "eos_or_max_tokens",
-  "prompt_id": "short_v1",
+  "prompt_id": "short_smoke_v1",
   "prompt_tier": "short",
   "prompt_token_count": 45,
   "generated_token_count": 87,
@@ -274,7 +274,7 @@ with open('results/<run_dir>/raw_metrics.jsonl') as f:
         record = json.loads(line)
         assert 'prompt_id' in record, 'Missing prompt_id'
         assert 'prompt_token_count' in record, 'Missing prompt_token_count'
-        # prompt_id should be versioned (e.g., short_v1)
+        # prompt_id should be versioned (e.g., short_smoke_v1)
         assert '_v' in record['prompt_id'], f'Invalid prompt_id format: {record[\"prompt_id\"]}'
         print(f'OK: prompt_id={record[\"prompt_id\"]}, prompt_token_count={record[\"prompt_token_count\"]}')
 "
