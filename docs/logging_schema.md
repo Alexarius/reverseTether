@@ -61,7 +61,7 @@ These fields are required for valid benchmark comparisons per DECISION_LOG.md DL
 | `suite_type` | string | Legacy alias for `prompt_suite_type`; may appear in older records |
 | `cache_policy` | string | Cache handling policy, e.g., `disabled`, `cleared_by_restart`, `unknown`, or `unsupported_unverified` |
 | `cache_expected` | boolean | Whether prompt/KV cache reuse was expected for this measured request; must be `false` for final evidence |
-| `cache_observed` | boolean | Whether prompt/KV cache reuse was observed or inferred from runtime prompt evaluation counts |
+| `cache_observed` | string | Runtime prompt evaluation evidence: `full_eval`, `collapsed_eval`, or `unknown` |
 | `cache_mismatch` | boolean | Whether expected and observed cache behavior disagree; must be `false` for final evidence |
 
 ### Device/Runtime Metadata
@@ -161,7 +161,7 @@ Final evidence records must explicitly describe cache behavior:
 |-------|----------------------|--------|
 | `cache_policy` | `disabled` or regime-compatible `cleared_by_restart` | Documents how cache reuse was prevented |
 | `cache_expected` | `false` | Final evidence expects full prompt evaluation |
-| `cache_observed` | `false` | Runtime counts must not indicate cache reuse |
+| `cache_observed` | `full_eval` | Runtime counts must not indicate cache reuse |
 | `cache_mismatch` | `false` | Mismatched cache state is an acceptance failure |
 
 Records with `cache_mismatch=true`, missing cache fields, or unverifiable cache behavior are development-only.
@@ -221,7 +221,7 @@ absent or `null`. Missing thermal data must not be replaced with guessed values.
   "suite_type": "final_dataset",
   "cache_policy": "disabled",
   "cache_expected": false,
-  "cache_observed": false,
+  "cache_observed": "full_eval",
   "cache_mismatch": false,
   "laptop_identifier": "yoga_slim7_14are05",
   "phone_identifier": "",

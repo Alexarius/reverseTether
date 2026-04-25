@@ -33,6 +33,12 @@ DEFAULT_MAX_TOKENS = 512
 DEFAULT_CONTEXT_LENGTH = 2048
 MODEL_SHA256_PATTERN = re.compile(r"^[a-f0-9]{64}$")
 LLAMA_CPP_COMMIT_PATTERN = re.compile(r"^[a-f0-9]{40}$")
+WARM_CACHE_POLICIES = {
+    "warm_cache",
+    "cache_reuse_expected",
+    "prompt_cache_reuse_expected",
+    "kv_cache_reuse_expected",
+}
 
 
 @dataclass
@@ -241,6 +247,34 @@ def extract_prompt_token_count(events: list[dict]) -> Optional[int]:
     return None
 
 
+def evaluate_cache_policy(
+    cache_policy: str,
+    fixture_prompt_token_count: Optional[int],
+    runtime_prompt_eval_token_count: Optional[int],
+) -> tuple[bool, str, bool]:
+    """Evaluate cache expectations and observed prompt evaluation evidence."""
+    normalized_policy = cache_policy.strip().lower()
+    cache_expected = normalized_policy in WARM_CACHE_POLICIES
+    cache_observed = "unknown"
+
+    if runtime_prompt_eval_token_count is not None:
+        collapsed_eval = runtime_prompt_eval_token_count == 1
+        if (
+            fixture_prompt_token_count is not None
+            and fixture_prompt_token_count > 0
+        ):
+            collapsed_eval = (
+                collapsed_eval
+                or runtime_prompt_eval_token_count < fixture_prompt_token_count * 0.10
+            )
+        cache_observed = "collapsed_eval" if collapsed_eval else "full_eval"
+
+    cache_mismatch = (
+        not cache_expected and cache_observed == "collapsed_eval"
+    )
+    return cache_expected, cache_observed, cache_mismatch
+
+
 def stream_completion(
     prompt: str,
     config: BenchmarkConfig,
@@ -436,6 +470,11 @@ def create_failed_run_record(
     """Create a durable error record for a failed matrix repetition."""
     timestamp = datetime.now().isoformat()
     benchmark_condition_id = f"{config.node}_{config.backend}_{config.server_mode}_{config.quantization}"
+    cache_expected, cache_observed, cache_mismatch = evaluate_cache_policy(
+        cache_policy=config.cache_policy,
+        fixture_prompt_token_count=config.fixture_prompt_token_count,
+        runtime_prompt_eval_token_count=None,
+    )
 
     return RunRecord(
         timestamp=timestamp,
@@ -444,6 +483,10 @@ def create_failed_run_record(
         suite_type=config.suite_type,
         cache_policy=config.cache_policy,
         fixture_prompt_token_count=config.fixture_prompt_token_count,
+        runtime_prompt_eval_token_count=None,
+        cache_expected=cache_expected,
+        cache_observed=cache_observed,
+        cache_mismatch=cache_mismatch,
         repetition_index=repetition_index,
         benchmark_condition_id=benchmark_condition_id,
         node=config.node,
@@ -536,6 +579,12 @@ def run_benchmark(
 
     # Generate benchmark condition ID for grouping comparable runs
     benchmark_condition_id = f"{config.node}_{config.backend}_{config.server_mode}_{config.quantization}"
+    runtime_prompt_eval_token_count = extract_prompt_token_count(events)
+    cache_expected, cache_observed, cache_mismatch = evaluate_cache_policy(
+        cache_policy=config.cache_policy,
+        fixture_prompt_token_count=config.fixture_prompt_token_count,
+        runtime_prompt_eval_token_count=runtime_prompt_eval_token_count,
+    )
 
     # Build the run record with all mandatory fields
     record = RunRecord(
@@ -546,6 +595,10 @@ def run_benchmark(
         suite_type=config.suite_type,
         cache_policy=config.cache_policy,
         fixture_prompt_token_count=config.fixture_prompt_token_count,
+        runtime_prompt_eval_token_count=runtime_prompt_eval_token_count,
+        cache_expected=cache_expected,
+        cache_observed=cache_observed,
+        cache_mismatch=cache_mismatch,
         repetition_index=repetition_index,
         benchmark_condition_id=benchmark_condition_id,
         node=config.node,
@@ -572,7 +625,7 @@ def run_benchmark(
         # Prompt/output metadata
         prompt_id=prompt_id,
         prompt_tier=config.prompt_tier,
-        prompt_token_count=extract_prompt_token_count(events),
+        prompt_token_count=runtime_prompt_eval_token_count,
         generated_token_count=timing.generated_token_count,
         stop_reason=stop_reason,
         # Timing metadata

@@ -205,7 +205,7 @@ Final records must include:
 - `cache_observed`
 - `cache_mismatch`
 
-For accepted final records, `cache_expected` must be `false`, `cache_observed` must be `false`, and `cache_mismatch` must be `false`.
+For accepted final records, `cache_expected` must be `false`, `cache_observed` must be `"full_eval"`, and `cache_mismatch` must be `false`.
 
 Cache mismatch detection is an acceptance gate. If cache reuse is observed, suspected from runtime prompt evaluation counts, or cannot be verified, the affected record is development-only and excluded from final dissertation claims.
 

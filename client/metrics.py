@@ -139,6 +139,10 @@ class RunRecord:
     suite_type: str = ""  # smoke, final_dataset
     cache_policy: str = "unknown"  # unknown, system_managed, cache_mismatch, cleared
     fixture_prompt_token_count: Optional[int] = None
+    runtime_prompt_eval_token_count: Optional[int] = None
+    cache_expected: bool = False
+    cache_observed: str = "unknown"
+    cache_mismatch: bool = False
     repetition_index: int = 0
     benchmark_condition_id: str = ""  # Unique identifier for the experimental condition
     server_mode: str = "local"  # local, phone

@@ -123,9 +123,17 @@ class TestBenchmarkLogging(unittest.TestCase):
             self.assertEqual(record.suite_type, "smoke")
             self.assertEqual(record.cache_policy, "system_managed")
             self.assertEqual(record.fixture_prompt_token_count, 45)
+            self.assertEqual(record.runtime_prompt_eval_token_count, 42)
+            self.assertFalse(record.cache_expected)
+            self.assertEqual(record.cache_observed, "full_eval")
+            self.assertFalse(record.cache_mismatch)
             self.assertEqual(raw_record["suite_type"], "smoke")
             self.assertEqual(raw_record["cache_policy"], "system_managed")
             self.assertEqual(raw_record["fixture_prompt_token_count"], 45)
+            self.assertEqual(raw_record["runtime_prompt_eval_token_count"], 42)
+            self.assertFalse(raw_record["cache_expected"])
+            self.assertEqual(raw_record["cache_observed"], "full_eval")
+            self.assertFalse(raw_record["cache_mismatch"])
             self.assertEqual(raw_record["start_temperature_c"], 32.5)
             self.assertEqual(raw_record["end_temperature_c"], 34.0)
             self.assertEqual(raw_record["temperature_source"], "sysfs_power_supply_battery_temp")
@@ -435,6 +443,99 @@ class TestPromptTokenCountExtraction(unittest.TestCase):
         self.assertIsNone(extract_prompt_token_count(events))
 
 
+class TestCachePolicyEvaluation(unittest.TestCase):
+    """Tests for runtime prompt eval cache mismatch evidence."""
+
+    def _run_with_runtime_prompt_count(
+        self,
+        *,
+        cache_policy: str,
+        fixture_prompt_token_count: int,
+        runtime_prompt_eval_token_count: int,
+    ):
+        config = BenchmarkConfig(
+            node="yoga",
+            backend="cpu",
+            run_type="warm",
+            prompt_tier="short",
+            suite_type="final_dataset",
+            cache_policy=cache_policy,
+            fixture_prompt_token_count=fixture_prompt_token_count,
+            model_sha256=VALID_MODEL_SHA256,
+            llama_cpp_commit=VALID_LLAMA_CPP_COMMIT,
+        )
+        timing = TimingData(
+            request_sent_ts=10.0,
+            first_token_ts=11.0,
+            final_token_ts=13.0,
+            generated_token_count=5,
+            client_overhead_ms=2.0,
+            request_sent_wallclock=datetime(2026, 3, 25, 12, 0, 0),
+            first_token_wallclock=datetime(2026, 3, 25, 12, 0, 1),
+            final_token_wallclock=datetime(2026, 3, 25, 12, 0, 3),
+        )
+        events = [{"stop": True, "tokens_evaluated": runtime_prompt_eval_token_count}]
+
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+
+            with patch(
+                "client.benchmark.stream_completion",
+                return_value=(timing, events, "eos"),
+            ), patch("client.benchmark.uuid.uuid4", return_value="test-run-id"):
+                record = run_benchmark(
+                    prompt="Test prompt",
+                    prompt_id="short_final_1",
+                    config=config,
+                    output_dir=output_dir,
+                )
+
+            raw_record = json.loads(
+                (output_dir / "raw_metrics.jsonl").read_text(encoding="utf-8").strip()
+            )
+
+        return record, raw_record
+
+    def test_collapsed_prompt_eval_without_expected_cache_sets_mismatch(self):
+        """A tiny runtime prompt eval count should flag cache contamination."""
+        record, raw_record = self._run_with_runtime_prompt_count(
+            cache_policy="disabled",
+            fixture_prompt_token_count=100,
+            runtime_prompt_eval_token_count=1,
+        )
+
+        self.assertEqual(record.runtime_prompt_eval_token_count, 1)
+        self.assertEqual(record.prompt_token_count, 1)
+        self.assertFalse(record.cache_expected)
+        self.assertEqual(record.cache_observed, "collapsed_eval")
+        self.assertTrue(record.cache_mismatch)
+        self.assertEqual(raw_record["runtime_prompt_eval_token_count"], 1)
+        self.assertTrue(raw_record["cache_mismatch"])
+
+    def test_less_than_ten_percent_prompt_eval_sets_mismatch(self):
+        """A runtime prompt eval count below 10% of the fixture is collapsed."""
+        record, _ = self._run_with_runtime_prompt_count(
+            cache_policy="disabled",
+            fixture_prompt_token_count=200,
+            runtime_prompt_eval_token_count=19,
+        )
+
+        self.assertEqual(record.cache_observed, "collapsed_eval")
+        self.assertTrue(record.cache_mismatch)
+
+    def test_warm_cache_policy_allows_collapsed_prompt_eval(self):
+        """Explicit warm-cache policy should not mark expected reuse as mismatch."""
+        record, _ = self._run_with_runtime_prompt_count(
+            cache_policy="warm_cache",
+            fixture_prompt_token_count=100,
+            runtime_prompt_eval_token_count=1,
+        )
+
+        self.assertTrue(record.cache_expected)
+        self.assertEqual(record.cache_observed, "collapsed_eval")
+        self.assertFalse(record.cache_mismatch)
+
+
 class TestReproducibilityValidation(unittest.TestCase):
     """Tests for strict reproducibility field validation."""
 
@@ -514,6 +615,8 @@ class TestReproducibilityValidation(unittest.TestCase):
 
             self.assertEqual(record.generated_token_count, 4)
             self.assertEqual(record.prompt_token_count, 7)
+            self.assertEqual(record.runtime_prompt_eval_token_count, 7)
+            self.assertEqual(record.cache_observed, "full_eval")
             self.assertTrue((output_dir / "metadata.json").exists())
             self.assertTrue((output_dir / "raw_metrics.jsonl").exists())
 
@@ -610,6 +713,8 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
 
             self.assertIn("prompt_token_count", record)
             self.assertEqual(record["prompt_token_count"], 142)
+            self.assertIn("runtime_prompt_eval_token_count", record)
+            self.assertEqual(record["runtime_prompt_eval_token_count"], 142)
 
     def test_jsonl_contains_prompt_token_count_from_nested_timings(self):
         """run_benchmark should use the helper for timings.prompt_n metadata."""
@@ -656,6 +761,8 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
 
             self.assertIn("prompt_token_count", record)
             self.assertEqual(record["prompt_token_count"], 91)
+            self.assertIn("runtime_prompt_eval_token_count", record)
+            self.assertEqual(record["runtime_prompt_eval_token_count"], 91)
 
     def test_jsonl_prompt_token_count_null_when_not_reported(self):
         """prompt_token_count should be null if server doesn't report it."""
@@ -700,6 +807,8 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
             # Field should exist but be null
             self.assertIn("prompt_token_count", record)
             self.assertIsNone(record["prompt_token_count"])
+            self.assertIn("runtime_prompt_eval_token_count", record)
+            self.assertIsNone(record["runtime_prompt_eval_token_count"])
 
     def test_jsonl_prompt_tier_matches_config(self):
         """prompt_tier field should reflect the configured tier."""
@@ -790,6 +899,10 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
                 self.assertIn("suite_type", record)
                 self.assertIn("cache_policy", record)
                 self.assertIn("fixture_prompt_token_count", record)
+                self.assertIn("runtime_prompt_eval_token_count", record)
+                self.assertIn("cache_expected", record)
+                self.assertIn("cache_observed", record)
+                self.assertIn("cache_mismatch", record)
                 self.assertEqual(record["suite_type"], "smoke")
                 self.assertEqual(record["cache_policy"], "cache_mismatch")
                 self.assertEqual(record["fixture_prompt_token_count"], 37)
@@ -1319,6 +1432,10 @@ class TestMatrixRunner(unittest.TestCase):
         self.assertEqual(failed_record["suite_type"], "smoke")
         self.assertEqual(failed_record["cache_policy"], "system_managed")
         self.assertEqual(failed_record["fixture_prompt_token_count"], 37)
+        self.assertIsNone(failed_record["runtime_prompt_eval_token_count"])
+        self.assertFalse(failed_record["cache_expected"])
+        self.assertEqual(failed_record["cache_observed"], "unknown")
+        self.assertFalse(failed_record["cache_mismatch"])
         self.assertEqual(failed_record["start_temperature_c"], 35.0)
         self.assertEqual(failed_record["end_temperature_c"], 36.5)
         self.assertEqual(failed_record["temperature_source"], "dumpsys_battery_temperature")

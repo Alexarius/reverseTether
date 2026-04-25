@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 RUN_DIR_PATTERN = re.compile(
     r"^(\d{8}_\d{6})_([a-zA-Z0-9]+)_([a-zA-Z0-9]+)_([a-zA-Z]+)$"
 )
+FINAL_EVIDENCE_CACHE_POLICIES = {"disabled", "cleared_by_restart"}
 
 
 def parse_run_directory_name(dirname: str) -> dict[str, str] | None:
@@ -176,15 +177,19 @@ def apply_final_evidence_filter(df: pd.DataFrame) -> pd.DataFrame:
     """
     Keep only records eligible for final evidence aggregation.
 
-    This is opt-in so older JSONL logs keep their existing aggregation behavior.
-    Missing suite_type/cache_policy values are excluded when strict filtering is
-    requested.
+    This is the default aggregation behavior. Missing suite/cache metadata is
+    excluded so development and legacy records cannot enter final summaries by
+    accident.
     """
     if df.empty:
         logger.info("Final evidence strict filter dropped 0 records.")
         return df
 
     suite_type = (
+        df["prompt_suite_type"]
+        if "prompt_suite_type" in df.columns
+        else pd.Series(pd.NA, index=df.index)
+    ).combine_first(
         df["suite_type"]
         if "suite_type" in df.columns
         else pd.Series(pd.NA, index=df.index)
@@ -194,16 +199,40 @@ def apply_final_evidence_filter(df: pd.DataFrame) -> pd.DataFrame:
         if "cache_policy" in df.columns
         else pd.Series(pd.NA, index=df.index)
     )
+    cache_observed = (
+        df["cache_observed"]
+        if "cache_observed" in df.columns
+        else pd.Series(pd.NA, index=df.index)
+    )
+    stop_reason = (
+        df["stop_reason"]
+        if "stop_reason" in df.columns
+        else pd.Series(pd.NA, index=df.index)
+    )
+    ttft_ms = (
+        pd.to_numeric(df["ttft_ms"], errors="coerce")
+        if "ttft_ms" in df.columns
+        else pd.Series(pd.NA, index=df.index)
+    )
 
     suite_text = suite_type.astype("string").str.strip()
     cache_text = cache_policy.astype("string").str.strip()
+    observed_text = cache_observed.astype("string").str.strip()
+    stop_text = stop_reason.astype("string").str.strip()
     suite_present = suite_text.notna() & suite_text.ne("").fillna(False)
     cache_present = cache_text.notna() & cache_text.ne("").fillna(False)
+    cache_expected = _field_true_mask(df, "cache_expected")
+    cache_mismatch = _field_true_mask(df, "cache_mismatch")
+    is_failure = stop_text.eq("error").fillna(False) | ttft_ms.eq(0.0).fillna(False)
+    cache_verified = observed_text.eq("full_eval").fillna(False) | is_failure
     keep_mask = (
         suite_present
         & cache_present
-        & suite_text.ne("smoke").fillna(False)
-        & cache_text.ne("cache_mismatch").fillna(False)
+        & suite_text.eq("final_dataset").fillna(False)
+        & cache_text.isin(FINAL_EVIDENCE_CACHE_POLICIES)
+        & ~cache_expected
+        & ~cache_mismatch
+        & cache_verified
     )
 
     filtered = df.loc[keep_mask].copy()
@@ -212,6 +241,19 @@ def apply_final_evidence_filter(df: pd.DataFrame) -> pd.DataFrame:
         len(df) - len(filtered),
     )
     return filtered
+
+
+def _field_true_mask(df: pd.DataFrame, field_name: str) -> pd.Series:
+    """Return True for records whose boolean-like field explicitly flags true."""
+    if field_name not in df.columns:
+        return pd.Series(False, index=df.index)
+
+    value = df[field_name]
+    if pd.api.types.is_bool_dtype(value):
+        return value.fillna(False)
+
+    value_text = value.astype("string").str.strip().str.lower()
+    return value_text.isin({"true", "1", "yes"})
 
 
 def exclude_invalid_records(
@@ -465,9 +507,9 @@ Manual Cross-Check:
         help="Include prompt_id in aggregation groups and output labels.",
     )
     parser.add_argument(
-        "--final-evidence-only",
+        "--include-smoke",
         action="store_true",
-        help="Strictly exclude smoke, cache-mismatch, and legacy records from aggregation.",
+        help="Include smoke, development, and legacy records in aggregation.",
     )
     args = parser.parse_args()
 
@@ -492,7 +534,7 @@ Manual Cross-Check:
 
     logger.info("Collected %d total records", len(df))
 
-    if args.final_evidence_only:
+    if not args.include_smoke:
         df = apply_final_evidence_filter(df)
         if df.empty:
             logger.error("No records remain after final evidence strict filter. Exiting.")
