@@ -1,5 +1,125 @@
 {
   "version": "1.0.0",
-  "description": "Reserved for the final dissertation benchmark prompts. Do not use until final prompts are approved.",
-  "prompts": {}
+  "suite_type": "final_dataset",
+  "description": "Stub final dissertation benchmark suite. Prompt text and fixture token counts must be replaced with approved measured fixtures before final evidence runs.",
+  "dataset_metadata": {
+    "status": "stub",
+    "approval_state": "structure approved; prompt content not final evidence",
+    "fixture_prompt_token_count_method": "integer placeholders pending runtime tokenizer measurement",
+    "notes": "Do not use these stubs for dissertation claims."
+  },
+  "prompts": {
+    "final_short_stub_01": {
+      "id": "final_short_stub_01",
+      "tier": "short",
+      "fixture_prompt_token_count": 48,
+      "description": "Short final-suite stub 1",
+      "text": "Stub short prompt 1. Ask the assistant to explain one practical use of local inference in plain language."
+    },
+    "final_short_stub_02": {
+      "id": "final_short_stub_02",
+      "tier": "short",
+      "fixture_prompt_token_count": 52,
+      "description": "Short final-suite stub 2",
+      "text": "Stub short prompt 2. Ask for a concise comparison between local and remote language model inference."
+    },
+    "final_short_stub_03": {
+      "id": "final_short_stub_03",
+      "tier": "short",
+      "fixture_prompt_token_count": 50,
+      "description": "Short final-suite stub 3",
+      "text": "Stub short prompt 3. Request a brief explanation of why first-token latency matters to users."
+    },
+    "final_short_stub_04": {
+      "id": "final_short_stub_04",
+      "tier": "short",
+      "fixture_prompt_token_count": 47,
+      "description": "Short final-suite stub 4",
+      "text": "Stub short prompt 4. Ask for three simple checks before running a repeatable benchmark."
+    },
+    "final_short_stub_05": {
+      "id": "final_short_stub_05",
+      "tier": "short",
+      "fixture_prompt_token_count": 55,
+      "description": "Short final-suite stub 5",
+      "text": "Stub short prompt 5. Request a short answer about how thermal limits can affect sustained generation."
+    },
+    "final_medium_stub_01": {
+      "id": "final_medium_stub_01",
+      "tier": "medium",
+      "fixture_prompt_token_count": 480,
+      "description": "Medium final-suite stub 1",
+      "text": "Stub medium prompt 1. Provide a moderate-length passage about edge computing, then ask the assistant to summarize the main argument, identify two assumptions, and list practical measurement risks."
+    },
+    "final_medium_stub_02": {
+      "id": "final_medium_stub_02",
+      "tier": "medium",
+      "fixture_prompt_token_count": 505,
+      "description": "Medium final-suite stub 2",
+      "text": "Stub medium prompt 2. Provide a moderate-length technical note about USB transport, local servers, and repeatability, then ask for a structured summary and a short checklist."
+    },
+    "final_medium_stub_03": {
+      "id": "final_medium_stub_03",
+      "tier": "medium",
+      "fixture_prompt_token_count": 498,
+      "description": "Medium final-suite stub 3",
+      "text": "Stub medium prompt 3. Provide a moderate-length scenario about comparing two inference devices, then ask the assistant to separate measurement facts from interpretation."
+    },
+    "final_medium_stub_04": {
+      "id": "final_medium_stub_04",
+      "tier": "medium",
+      "fixture_prompt_token_count": 512,
+      "description": "Medium final-suite stub 4",
+      "text": "Stub medium prompt 4. Provide a moderate-length operations memo about logging, reproducibility metadata, and failed runs, then ask for concise recommendations."
+    },
+    "final_medium_stub_05": {
+      "id": "final_medium_stub_05",
+      "tier": "medium",
+      "fixture_prompt_token_count": 490,
+      "description": "Medium final-suite stub 5",
+      "text": "Stub medium prompt 5. Provide a moderate-length description of prompt workloads, then ask the assistant to classify expected latency pressure and explain why."
+    },
+    "final_long_stub_01": {
+      "id": "final_long_stub_01",
+      "tier": "long",
+      "fixture_prompt_token_count": 1450,
+      "description": "Long final-suite stub 1",
+      "text": "Stub long prompt 1. Provide a long technical document about benchmark design, controlled comparisons, logging fields, and interpretation limits, then ask for a detailed review."
+    },
+    "final_long_stub_02": {
+      "id": "final_long_stub_02",
+      "tier": "long",
+      "fixture_prompt_token_count": 1510,
+      "description": "Long final-suite stub 2",
+      "text": "Stub long prompt 2. Provide a long code review scenario with multiple functions, validation paths, and edge cases, then ask for prioritized findings and tests."
+    },
+    "final_long_stub_03": {
+      "id": "final_long_stub_03",
+      "tier": "long",
+      "fixture_prompt_token_count": 1495,
+      "description": "Long final-suite stub 3",
+      "text": "Stub long prompt 3. Provide a long requirements document for an experiment harness, then ask the assistant to extract invariants, risks, and acceptance criteria."
+    },
+    "final_long_stub_04": {
+      "id": "final_long_stub_04",
+      "tier": "long",
+      "fixture_prompt_token_count": 1535,
+      "description": "Long final-suite stub 4",
+      "text": "Stub long prompt 4. Provide a long troubleshooting transcript about server launch, transport setup, and measurement failures, then ask for a diagnostic plan."
+    },
+    "final_long_stub_05": {
+      "id": "final_long_stub_05",
+      "tier": "long",
+      "fixture_prompt_token_count": 1488,
+      "description": "Long final-suite stub 5",
+      "text": "Stub long prompt 5. Provide a long analysis brief about thermal behavior, repeated runs, and result aggregation, then ask for a careful summary."
+    },
+    "final_soak_stub_01": {
+      "id": "final_soak_stub_01",
+      "tier": "soak",
+      "fixture_prompt_token_count": 120,
+      "description": "Soak final-suite stub",
+      "text": "Stub soak prompt 1. Ask the assistant to write a compact Python helper, explain its complexity, and provide one example. This fixed prompt is reserved for repeated sustained-load testing."
+    }
+  }
 }

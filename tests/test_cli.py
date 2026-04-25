@@ -7,7 +7,12 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from client.cli import main as cli_main, load_prompt_suite, get_prompt_for_tier
+from client.cli import (
+    get_prompt_for_tier,
+    load_prompt_suite,
+    main as cli_main,
+    validate_prompt_suite,
+)
 from client.matrix import main as matrix_main
 
 
@@ -24,6 +29,7 @@ class TestPromptSuiteLoading(unittest.TestCase):
         """Valid smoke_suite.json should load and return dict."""
         suite_content = {
             "version": "1.0.0",
+            "suite_type": "smoke",
             "prompts": {
                 "short": {
                     "id": "short_smoke_v1",
@@ -60,6 +66,88 @@ class TestPromptSuiteLoading(unittest.TestCase):
                 load_prompt_suite(suite_path)
 
 
+class TestPromptSuiteValidation(unittest.TestCase):
+    """Tests for prompt suite structural validation."""
+
+    def _valid_final_suite(self):
+        prompts = {}
+        for tier, count in [("short", 5), ("medium", 5), ("long", 5), ("soak", 1)]:
+            for index in range(1, count + 1):
+                prompt_key = f"final_{tier}_{index}"
+                prompts[prompt_key] = {
+                    "id": prompt_key,
+                    "tier": tier,
+                    "text": f"{tier} prompt {index}",
+                    "fixture_prompt_token_count": index,
+                }
+
+        return {
+            "version": "1.0.0",
+            "suite_type": "final_dataset",
+            "dataset_metadata": {"status": "stub"},
+            "prompts": prompts,
+        }
+
+    def test_valid_smoke_suite_passes(self):
+        """Valid smoke suite should pass validation."""
+        suite = {
+            "suite_type": "smoke",
+            "prompts": {
+                "short": {
+                    "id": "short_smoke_v1",
+                    "text": "Short prompt text",
+                }
+            },
+        }
+
+        validate_prompt_suite(suite)
+
+    def test_valid_final_suite_passes(self):
+        """Valid final dataset suite should pass validation."""
+        validate_prompt_suite(self._valid_final_suite())
+
+    def test_duplicate_ids_fail_loudly(self):
+        """Duplicate prompt IDs should fail validation."""
+        suite = {
+            "suite_type": "smoke",
+            "prompts": {
+                "short": {"id": "duplicate_id", "text": "Short prompt"},
+                "medium": {"id": "duplicate_id", "text": "Medium prompt"},
+            },
+        }
+
+        with self.assertRaisesRegex(ValueError, "Duplicate prompt id"):
+            validate_prompt_suite(suite)
+
+    def test_missing_text_fails_loudly(self):
+        """Prompts missing text should fail validation."""
+        suite = {
+            "suite_type": "smoke",
+            "prompts": {
+                "short": {"id": "short_smoke_v1"},
+            },
+        }
+
+        with self.assertRaisesRegex(ValueError, "text"):
+            validate_prompt_suite(suite)
+
+    def test_final_suite_missing_fixture_token_count_fails_loudly(self):
+        """Final dataset prompts must include fixture token counts."""
+        suite = self._valid_final_suite()
+        del suite["prompts"]["final_short_1"]["fixture_prompt_token_count"]
+
+        with self.assertRaisesRegex(ValueError, "fixture_prompt_token_count"):
+            validate_prompt_suite(suite)
+
+    def test_final_suite_incorrect_bucket_counts_fails_loudly(self):
+        """Final dataset suite must enforce exact tier bucket counts."""
+        suite = self._valid_final_suite()
+        suite["prompts"]["final_short_1"]["tier"] = "medium"
+
+        with self.assertRaisesRegex(ValueError, "bucket counts"):
+            validate_prompt_suite(suite)
+
+
 class TestPromptTierExtraction(unittest.TestCase):
     """Tests for prompt tier extraction.
 
@@ -73,6 +161,7 @@ class TestPromptTierExtraction(unittest.TestCase):
         """Set up test suite fixture."""
         self.suite = {
             "version": "1.0.0",
+            "suite_type": "smoke",
             "prompts": {
                 "short": {
                     "id": "short_smoke_v1",
@@ -98,6 +187,30 @@ class TestPromptTierExtraction(unittest.TestCase):
 
         self.assertEqual(text, "Short prompt text")
         self.assertEqual(prompt_id, "short_smoke_v1")
+
+    def test_get_prompt_for_tier_matches_prompt_tier_when_key_differs(self):
+        """Should find the first prompt with a matching tier when keys are fixture IDs."""
+        suite = {
+            "version": "1.0.0",
+            "suite_type": "final_dataset",
+            "prompts": {
+                "final_short_stub_01": {
+                    "id": "final_short_stub_01",
+                    "tier": "short",
+                    "text": "First short prompt",
+                },
+                "final_short_stub_02": {
+                    "id": "final_short_stub_02",
+                    "tier": "short",
+                    "text": "Second short prompt",
+                },
+            },
+        }
+
+        text, prompt_id = get_prompt_for_tier(suite, "short")
+
+        self.assertEqual(text, "First short prompt")
+        self.assertEqual(prompt_id, "final_short_stub_01")
 
     def test_get_prompt_for_tier_versioned_id(self):
         """Prompt ID should include version for reproducibility tracking."""
@@ -140,6 +253,10 @@ class TestRealPromptSuiteIntegrity(unittest.TestCase):
         required_tiers = ["short", "medium", "long", "soak"]
         for tier in required_tiers:
             self.assertIn(tier, self.suite["prompts"], f"Missing tier: {tier}")
+
+    def test_smoke_suite_has_smoke_suite_type(self):
+        """Smoke suite must be explicitly marked as smoke."""
+        self.assertEqual(self.suite["suite_type"], "smoke")
 
     def test_smoke_suite_is_marked_development_only(self):
         """Smoke suite description must reject final-evidence use."""
@@ -201,13 +318,21 @@ class TestRealPromptSuiteIntegrity(unittest.TestCase):
         # Soak ID should be versioned
         self.assertTrue(soak_data["id"].startswith("soak_smoke_v"))
 
-    def test_final_suite_placeholder_exists(self):
-        """Final suite placeholder should be present but empty until approved."""
+    def test_final_suite_stub_exists(self):
+        """Final suite stub should be present with approved bucket structure."""
         final_suite_path = Path("configs/prompts/final_suite.json")
         self.assertTrue(final_suite_path.exists())
         final_suite = load_prompt_suite(final_suite_path)
-        self.assertIn("reserved for the final dissertation benchmark prompts", final_suite["description"].lower())
-        self.assertEqual(final_suite["prompts"], {})
+        self.assertEqual(final_suite["suite_type"], "final_dataset")
+        self.assertIn("dataset_metadata", final_suite)
+        self.assertEqual(len(final_suite["prompts"]), 16)
+
+        bucket_counts = {"short": 0, "medium": 0, "long": 0, "soak": 0}
+        for prompt_data in final_suite["prompts"].values():
+            bucket_counts[prompt_data["tier"]] += 1
+            self.assertIs(type(prompt_data["fixture_prompt_token_count"]), int)
+
+        self.assertEqual(bucket_counts, {"short": 5, "medium": 5, "long": 5, "soak": 1})
 
 
 class TestCliValidation(unittest.TestCase):
@@ -215,7 +340,10 @@ class TestCliValidation(unittest.TestCase):
 
     def test_main_exits_before_running_when_hashes_are_missing(self):
         """Real runs should exit non-zero before directory creation if hashes are missing."""
-        suite = {"prompts": {"short": {"text": "Test prompt", "id": "short_smoke_v1"}}}
+        suite = {
+            "suite_type": "smoke",
+            "prompts": {"short": {"text": "Test prompt", "id": "short_smoke_v1"}},
+        }
 
         with patch("client.cli.load_prompt_suite", return_value=suite) as load_suite_mock, patch(
             "client.cli.create_result_directory"
@@ -250,7 +378,10 @@ class TestMatrixCliValidation(unittest.TestCase):
 
     def test_run_matrix_requires_valid_regimes(self):
         """Matrix run should reject invalid regime values."""
-        suite = {"prompts": {"short": {"text": "Test prompt", "id": "short_smoke_v1"}}}
+        suite = {
+            "suite_type": "smoke",
+            "prompts": {"short": {"text": "Test prompt", "id": "short_smoke_v1"}},
+        }
 
         with patch("client.matrix.load_prompt_suite", return_value=suite) as load_suite_mock, patch(
             "sys.stderr",
@@ -280,7 +411,10 @@ class TestMatrixCliValidation(unittest.TestCase):
 
     def test_run_matrix_dry_run_succeeds(self):
         """Matrix dry run should succeed without server connection."""
-        suite = {"prompts": {"short": {"text": "Test prompt", "id": "short_smoke_v1"}}}
+        suite = {
+            "suite_type": "smoke",
+            "prompts": {"short": {"text": "Test prompt", "id": "short_smoke_v1"}},
+        }
 
         with patch("client.matrix.load_prompt_suite", return_value=suite) as load_suite_mock, patch(
             "client.matrix.create_matrix_output_directory"

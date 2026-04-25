@@ -20,6 +20,66 @@ from .benchmark import (
 )
 
 
+FINAL_DATASET_BUCKET_COUNTS = {"short": 5, "medium": 5, "long": 5, "soak": 1}
+VALID_SUITE_TYPES = {"smoke", "final_dataset"}
+
+
+def validate_prompt_suite(suite: dict) -> None:
+    """Validate prompt suite structure before any benchmark timing begins."""
+    suite_type = suite.get("suite_type")
+    if suite_type not in VALID_SUITE_TYPES:
+        raise ValueError("Prompt suite must define suite_type as 'smoke' or 'final_dataset'")
+
+    prompts = suite.get("prompts")
+    if not isinstance(prompts, dict):
+        raise ValueError("Prompt suite must define prompts as a dictionary")
+
+    prompt_ids = set()
+    for prompt_key, prompt_data in prompts.items():
+        if not isinstance(prompt_data, dict):
+            raise ValueError(f"Prompt '{prompt_key}' must be an object")
+
+        if "id" not in prompt_data:
+            raise ValueError(f"Prompt '{prompt_key}' is missing required field 'id'")
+        if "text" not in prompt_data:
+            raise ValueError(f"Prompt '{prompt_key}' is missing required field 'text'")
+
+        prompt_id = prompt_data["id"]
+        if prompt_id in prompt_ids:
+            raise ValueError(f"Duplicate prompt id '{prompt_id}' in prompt suite")
+        prompt_ids.add(prompt_id)
+
+    if suite_type != "final_dataset":
+        return
+
+    dataset_metadata = suite.get("dataset_metadata")
+    if not isinstance(dataset_metadata, dict):
+        raise ValueError("Final dataset suite must define dataset_metadata as an object")
+
+    bucket_counts = {tier: 0 for tier in FINAL_DATASET_BUCKET_COUNTS}
+    for prompt_key, prompt_data in prompts.items():
+        fixture_count = prompt_data.get("fixture_prompt_token_count")
+        if not isinstance(fixture_count, int) or isinstance(fixture_count, bool):
+            raise ValueError(
+                f"Final dataset prompt '{prompt_key}' must define integer "
+                "fixture_prompt_token_count"
+            )
+
+        tier = prompt_data.get("tier")
+        if tier not in FINAL_DATASET_BUCKET_COUNTS:
+            raise ValueError(
+                f"Final dataset prompt '{prompt_key}' must use tier "
+                "'short', 'medium', 'long', or 'soak'"
+            )
+        bucket_counts[tier] += 1
+
+    if bucket_counts != FINAL_DATASET_BUCKET_COUNTS:
+        raise ValueError(
+            "Final dataset prompt bucket counts must be "
+            f"{FINAL_DATASET_BUCKET_COUNTS}; got {bucket_counts}"
+        )
+
+
 def load_prompt_suite(suite_path: Path) -> dict:
     """Load the prompt suite configuration.
 
@@ -27,10 +87,13 @@ def load_prompt_suite(suite_path: Path) -> dict:
         suite_path: Path to the prompt suite JSON file
 
     Returns:
-        Dictionary mapping prompt tier to prompt data
+        Validated prompt suite dictionary
     """
     with open(suite_path, "r", encoding="utf-8") as f:
-        return json.load(f)
+        suite = json.load(f)
+
+    validate_prompt_suite(suite)
+    return suite
 
 
 def get_prompt_for_tier(suite: dict, tier: str) -> tuple[str, str]:
@@ -46,8 +109,17 @@ def get_prompt_for_tier(suite: dict, tier: str) -> tuple[str, str]:
     Raises:
         KeyError: If tier not found in suite
     """
-    prompt_data = suite["prompts"][tier]
-    return prompt_data["text"], prompt_data["id"]
+    prompts = suite["prompts"]
+    if tier in prompts:
+        prompt_data = prompts[tier]
+        if prompt_data.get("tier", tier) == tier:
+            return prompt_data["text"], prompt_data["id"]
+
+    for prompt_data in prompts.values():
+        if prompt_data.get("tier") == tier:
+            return prompt_data["text"], prompt_data["id"]
+
+    raise KeyError(tier)
 
 
 def main():
@@ -244,6 +316,9 @@ Mock mode:
         sys.exit(1)
     except json.JSONDecodeError as e:
         print(f"Error: Invalid JSON in prompt suite: {e}", file=sys.stderr)
+        sys.exit(1)
+    except ValueError as e:
+        print(f"Error: Invalid prompt suite: {e}", file=sys.stderr)
         sys.exit(1)
 
     # Get prompt for the specified tier

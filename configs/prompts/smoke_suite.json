@@ -1,5 +1,6 @@
 {
   "version": "1.0.0",
+  "suite_type": "smoke",
   "description": "SMOKE/DEVELOPMENT ONLY. Not for final evidence. Token counts are approximate; actual counts from runtime.",
   "prompts": {
     "short": {
