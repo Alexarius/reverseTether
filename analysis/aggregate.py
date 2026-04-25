@@ -150,7 +150,9 @@ def collect_runs(input_dir: Path) -> pd.DataFrame:
     return pd.DataFrame(all_records)
 
 
-def validate_required_columns(df: pd.DataFrame) -> bool:
+def validate_required_columns(
+    df: pd.DataFrame, group_by_prompt_id: bool = False
+) -> bool:
     """Check that required columns exist for aggregation."""
     required = [
         "run_id",
@@ -161,11 +163,55 @@ def validate_required_columns(df: pd.DataFrame) -> bool:
         "ttft_ms",
         "decode_tps",
     ]
+    if group_by_prompt_id:
+        required.append("prompt_id")
     missing = [col for col in required if col not in df.columns]
     if missing:
         logger.error("Missing required columns: %s", missing)
         return False
     return True
+
+
+def apply_final_evidence_filter(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Keep only records eligible for final evidence aggregation.
+
+    This is opt-in so older JSONL logs keep their existing aggregation behavior.
+    Missing suite_type/cache_policy values are excluded when strict filtering is
+    requested.
+    """
+    if df.empty:
+        logger.info("Final evidence strict filter dropped 0 records.")
+        return df
+
+    suite_type = (
+        df["suite_type"]
+        if "suite_type" in df.columns
+        else pd.Series(pd.NA, index=df.index)
+    )
+    cache_policy = (
+        df["cache_policy"]
+        if "cache_policy" in df.columns
+        else pd.Series(pd.NA, index=df.index)
+    )
+
+    suite_text = suite_type.astype("string").str.strip()
+    cache_text = cache_policy.astype("string").str.strip()
+    suite_present = suite_text.notna() & suite_text.ne("").fillna(False)
+    cache_present = cache_text.notna() & cache_text.ne("").fillna(False)
+    keep_mask = (
+        suite_present
+        & cache_present
+        & suite_text.ne("smoke").fillna(False)
+        & cache_text.ne("cache_mismatch").fillna(False)
+    )
+
+    filtered = df.loc[keep_mask].copy()
+    logger.info(
+        "Final evidence strict filter dropped %d records.",
+        len(df) - len(filtered),
+    )
+    return filtered
 
 
 def exclude_invalid_records(
@@ -199,11 +245,14 @@ def exclude_invalid_records(
     return df.loc[~missing_required_mask].copy()
 
 
-def compute_aggregates(df: pd.DataFrame) -> pd.DataFrame:
+def compute_aggregates(
+    df: pd.DataFrame, group_by_prompt_id: bool = False
+) -> pd.DataFrame:
     """
     Compute aggregated metrics grouped by condition.
 
     Groups by: benchmark_condition_id, regime, prompt_tier
+    Optionally includes prompt_id when requested.
     Computes for each group:
       - Sample count
       - Failure count
@@ -219,9 +268,12 @@ def compute_aggregates(df: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame()
 
     group_keys = ["benchmark_condition_id", "regime", "prompt_tier"]
+    if group_by_prompt_id:
+        group_keys.append("prompt_id")
+
     df = exclude_invalid_records(
         df,
-        required_value_cols=["benchmark_condition_id", "regime", "prompt_tier", "stop_reason", "ttft_ms"],
+        required_value_cols=group_keys + ["stop_reason", "ttft_ms"],
     )
     if df.empty:
         logger.warning("No valid records remain after excluding invalid rows.")
@@ -312,6 +364,8 @@ def plot_ttft_comparison(df: pd.DataFrame, output_path: Path) -> None:
     df["condition"] = (
         df["benchmark_condition_id"] + "_" + df["regime"] + "_" + df["prompt_tier"]
     )
+    if "prompt_id" in df.columns:
+        df["condition"] = df["condition"] + "_" + df["prompt_id"].astype(str)
 
     fig, ax = plt.subplots(figsize=(10, 6))
     bars = ax.bar(df["condition"], df["ttft_p50_ms"], color="steelblue", edgecolor="black")
@@ -353,6 +407,8 @@ def plot_decode_tps_comparison(df: pd.DataFrame, output_path: Path) -> None:
     df["condition"] = (
         df["benchmark_condition_id"] + "_" + df["regime"] + "_" + df["prompt_tier"]
     )
+    if "prompt_id" in df.columns:
+        df["condition"] = df["condition"] + "_" + df["prompt_id"].astype(str)
 
     fig, ax = plt.subplots(figsize=(10, 6))
     bars = ax.bar(df["condition"], df["decode_tps_mean"], color="darkorange", edgecolor="black")
@@ -403,6 +459,16 @@ Manual Cross-Check:
         required=True,
         help="Output directory for summaries (e.g., results/summaries/)",
     )
+    parser.add_argument(
+        "--group-by-prompt-id",
+        action="store_true",
+        help="Include prompt_id in aggregation groups and output labels.",
+    )
+    parser.add_argument(
+        "--final-evidence-only",
+        action="store_true",
+        help="Strictly exclude smoke, cache-mismatch, and legacy records from aggregation.",
+    )
     args = parser.parse_args()
 
     input_dir = args.input.resolve()
@@ -426,13 +492,19 @@ Manual Cross-Check:
 
     logger.info("Collected %d total records", len(df))
 
+    if args.final_evidence_only:
+        df = apply_final_evidence_filter(df)
+        if df.empty:
+            logger.error("No records remain after final evidence strict filter. Exiting.")
+            return 1
+
     # Validate required columns
-    if not validate_required_columns(df):
+    if not validate_required_columns(df, group_by_prompt_id=args.group_by_prompt_id):
         return 1
 
     # Compute aggregates
     logger.info("Computing aggregated metrics...")
-    agg_df = compute_aggregates(df)
+    agg_df = compute_aggregates(df, group_by_prompt_id=args.group_by_prompt_id)
 
     if agg_df.empty:
         logger.error("Aggregation produced no results. Exiting.")
