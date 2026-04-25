@@ -452,13 +452,14 @@ class TestCachePolicyEvaluation(unittest.TestCase):
         cache_policy: str,
         fixture_prompt_token_count: int,
         runtime_prompt_eval_token_count: int,
+        suite_type: str = "smoke",
     ):
         config = BenchmarkConfig(
             node="yoga",
             backend="cpu",
             run_type="warm",
             prompt_tier="short",
-            suite_type="final_dataset",
+            suite_type=suite_type,
             cache_policy=cache_policy,
             fixture_prompt_token_count=fixture_prompt_token_count,
             model_sha256=VALID_MODEL_SHA256,
@@ -534,6 +535,77 @@ class TestCachePolicyEvaluation(unittest.TestCase):
         self.assertTrue(record.cache_expected)
         self.assertEqual(record.cache_observed, "collapsed_eval")
         self.assertFalse(record.cache_mismatch)
+
+    def test_final_dataset_expected_cache_policy_raises_before_streaming(self):
+        """Final evidence runs must fail before invocation if cache reuse is expected."""
+        config = BenchmarkConfig(
+            node="yoga",
+            backend="cpu",
+            run_type="warm",
+            prompt_tier="short",
+            suite_type="final_dataset",
+            cache_policy="warm_cache",
+            fixture_prompt_token_count=100,
+            model_sha256=VALID_MODEL_SHA256,
+            llama_cpp_commit=VALID_LLAMA_CPP_COMMIT,
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+
+            with patch("client.benchmark.stream_completion") as stream_mock:
+                with self.assertRaisesRegex(RuntimeError, "Final dataset cache gate"):
+                    run_benchmark(
+                        prompt="Test prompt",
+                        prompt_id="short_final_1",
+                        config=config,
+                        output_dir=output_dir,
+                    )
+
+            stream_mock.assert_not_called()
+            self.assertFalse((output_dir / "raw_metrics.jsonl").exists())
+
+    def test_final_dataset_runtime_cache_mismatch_raises_without_success_record(self):
+        """Collapsed prompt evaluation must fail final runs before raw success logging."""
+        config = BenchmarkConfig(
+            node="yoga",
+            backend="cpu",
+            run_type="warm",
+            prompt_tier="short",
+            suite_type="final_dataset",
+            cache_policy="disabled",
+            fixture_prompt_token_count=100,
+            model_sha256=VALID_MODEL_SHA256,
+            llama_cpp_commit=VALID_LLAMA_CPP_COMMIT,
+        )
+        timing = TimingData(
+            request_sent_ts=10.0,
+            first_token_ts=11.0,
+            final_token_ts=13.0,
+            generated_token_count=5,
+            client_overhead_ms=2.0,
+            request_sent_wallclock=datetime(2026, 3, 25, 12, 0, 0),
+            first_token_wallclock=datetime(2026, 3, 25, 12, 0, 1),
+            final_token_wallclock=datetime(2026, 3, 25, 12, 0, 3),
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+
+            with patch(
+                "client.benchmark.stream_completion",
+                return_value=(timing, [{"stop": True, "tokens_evaluated": 1}], "eos"),
+            ) as stream_mock:
+                with self.assertRaisesRegex(RuntimeError, "Final dataset cache gate"):
+                    run_benchmark(
+                        prompt="Test prompt",
+                        prompt_id="short_final_1",
+                        config=config,
+                        output_dir=output_dir,
+                    )
+
+            stream_mock.assert_called_once()
+            self.assertFalse((output_dir / "raw_metrics.jsonl").exists())
 
 
 class TestReproducibilityValidation(unittest.TestCase):

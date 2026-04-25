@@ -31,6 +31,7 @@ DEFAULT_TEMPERATURE = 0.0
 DEFAULT_SEED = 42
 DEFAULT_MAX_TOKENS = 512
 DEFAULT_CONTEXT_LENGTH = 2048
+FINAL_DATASET_SUITE_TYPE = "final_dataset"
 MODEL_SHA256_PATTERN = re.compile(r"^[a-f0-9]{64}$")
 LLAMA_CPP_COMMIT_PATTERN = re.compile(r"^[a-f0-9]{40}$")
 WARM_CACHE_POLICIES = {
@@ -38,6 +39,12 @@ WARM_CACHE_POLICIES = {
     "cache_reuse_expected",
     "prompt_cache_reuse_expected",
     "kv_cache_reuse_expected",
+}
+CACHE_POLLUTION_POLICIES = {
+    "cache_mismatch",
+    "cache_pollution",
+    "cache_polluted",
+    "polluted_cache",
 }
 
 
@@ -253,9 +260,10 @@ def evaluate_cache_policy(
     runtime_prompt_eval_token_count: Optional[int],
 ) -> tuple[bool, str, bool]:
     """Evaluate cache expectations and observed prompt evaluation evidence."""
-    normalized_policy = cache_policy.strip().lower()
+    normalized_policy = (cache_policy or "").strip().lower()
     cache_expected = normalized_policy in WARM_CACHE_POLICIES
     cache_observed = "unknown"
+    policy_reports_pollution = normalized_policy in CACHE_POLLUTION_POLICIES
 
     if runtime_prompt_eval_token_count is not None:
         collapsed_eval = runtime_prompt_eval_token_count == 1
@@ -268,11 +276,37 @@ def evaluate_cache_policy(
                 or runtime_prompt_eval_token_count < fixture_prompt_token_count * 0.10
             )
         cache_observed = "collapsed_eval" if collapsed_eval else "full_eval"
+    elif policy_reports_pollution:
+        cache_observed = "collapsed_eval"
 
     cache_mismatch = (
-        not cache_expected and cache_observed == "collapsed_eval"
+        policy_reports_pollution
+        or (not cache_expected and cache_observed == "collapsed_eval")
     )
     return cache_expected, cache_observed, cache_mismatch
+
+
+def enforce_final_dataset_cache_gate(
+    config: BenchmarkConfig,
+    cache_expected: bool,
+    cache_observed: str,
+    cache_mismatch: bool,
+) -> None:
+    """Fail final-dataset runs when cache evidence is incompatible with final evidence."""
+    if config.suite_type != FINAL_DATASET_SUITE_TYPE:
+        return
+
+    if not cache_expected and not cache_mismatch:
+        return
+
+    raise RuntimeError(
+        "Final dataset cache gate failed: "
+        f"cache_policy={config.cache_policy!r}, "
+        f"cache_expected={cache_expected}, "
+        f"cache_observed={cache_observed!r}, "
+        f"cache_mismatch={cache_mismatch}. "
+        "Final evidence requires full prompt evaluation with no cache reuse."
+    )
 
 
 def stream_completion(
@@ -553,6 +587,17 @@ def run_benchmark(
         Completed RunRecord with all metrics
     """
     validate_reproducibility_fields(config)
+    cache_expected, cache_observed, cache_mismatch = evaluate_cache_policy(
+        cache_policy=config.cache_policy,
+        fixture_prompt_token_count=config.fixture_prompt_token_count,
+        runtime_prompt_eval_token_count=None,
+    )
+    enforce_final_dataset_cache_gate(
+        config=config,
+        cache_expected=cache_expected,
+        cache_observed=cache_observed,
+        cache_mismatch=cache_mismatch,
+    )
 
     if output_dir is None:
         output_dir = create_result_directory(config)
@@ -584,6 +629,12 @@ def run_benchmark(
         cache_policy=config.cache_policy,
         fixture_prompt_token_count=config.fixture_prompt_token_count,
         runtime_prompt_eval_token_count=runtime_prompt_eval_token_count,
+    )
+    enforce_final_dataset_cache_gate(
+        config=config,
+        cache_expected=cache_expected,
+        cache_observed=cache_observed,
+        cache_mismatch=cache_mismatch,
     )
 
     # Build the run record with all mandatory fields
