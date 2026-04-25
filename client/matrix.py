@@ -83,13 +83,13 @@ def resolve_matrix_prompts(
     suite: dict,
     args: argparse.Namespace,
     regimes: list[str],
-) -> tuple[list[tuple[str, str]], tuple[str, str] | None, dict[str, str]]:
+) -> tuple[list[dict], dict | None, dict[str, str]]:
     """Resolve normal prompts plus the separate fixed soak prompt."""
     prompt_tiers_by_id = get_prompt_tier_by_id(suite)
     has_soak_regime = SOAK_PROMPT_TIER in regimes
     has_normal_regime = any(regime != SOAK_PROMPT_TIER for regime in regimes)
     soak_prompt = get_soak_prompt(suite) if has_soak_regime else None
-    normal_prompts: list[tuple[str, str]] = []
+    normal_prompts: list[dict] = []
 
     if has_normal_regime:
         if args.prompt_tier == SOAK_PROMPT_TIER:
@@ -107,9 +107,9 @@ def resolve_matrix_prompts(
             all_final_prompts=args.all_final_prompts,
         )
         normal_prompts = [
-            (prompt, prompt_id)
-            for prompt, prompt_id in normal_prompts
-            if prompt_tiers_by_id[prompt_id] != SOAK_PROMPT_TIER
+            prompt_obj
+            for prompt_obj in normal_prompts
+            if prompt_tiers_by_id[prompt_obj["id"]] != SOAK_PROMPT_TIER
         ]
         if not normal_prompts:
             raise ValueError("Cold and warm regimes require non-soak prompts")
@@ -414,7 +414,7 @@ Examples:
         print("  Prompt selection: all final non-soak prompts")
     print(f"  Selected normal prompts: {len(prompts)}")
     if soak_prompt is not None:
-        print(f"  Soak prompt: {soak_prompt[1]}")
+        print(f"  Soak prompt: {soak_prompt['id']}")
     print(f"  Server mode: {base_config.server_mode}")
     print(f"  Regimes: {', '.join(regimes)}")
     print(f"  Repetitions per regime: {args.repetitions}")

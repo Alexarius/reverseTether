@@ -5,6 +5,7 @@ import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from client.cli import (
@@ -208,7 +209,7 @@ class TestPromptTierExtraction(unittest.TestCase):
     """Tests for prompt tier extraction.
 
     Per Issue 09 requirements:
-    - get_prompt_for_tier must return (text, id) tuple
+    - get_prompt_for_tier must return the full prompt fixture object
     - prompt_id must be used in log records for reproducibility
     - Missing tiers must fail loudly
     """
@@ -237,12 +238,13 @@ class TestPromptTierExtraction(unittest.TestCase):
             }
         }
 
-    def test_get_prompt_for_tier_returns_text_and_id(self):
-        """Should return (text, id) tuple for valid tier."""
-        text, prompt_id = get_prompt_for_tier(self.suite, "short")
+    def test_get_prompt_for_tier_returns_fixture_object(self):
+        """Should return a prompt fixture object for valid tier."""
+        prompt = get_prompt_for_tier(self.suite, "short")
 
-        self.assertEqual(text, "Short prompt text")
-        self.assertEqual(prompt_id, "short_smoke_v1")
+        self.assertEqual(prompt["text"], "Short prompt text")
+        self.assertEqual(prompt["id"], "short_smoke_v1")
+        self.assertEqual(prompt["tier"], "short")
 
     def test_get_prompt_for_tier_matches_prompt_tier_when_key_differs(self):
         """Should find the first prompt with a matching tier when keys are fixture IDs."""
@@ -263,14 +265,14 @@ class TestPromptTierExtraction(unittest.TestCase):
             },
         }
 
-        text, prompt_id = get_prompt_for_tier(suite, "short")
+        prompt = get_prompt_for_tier(suite, "short")
 
-        self.assertEqual(text, "First short prompt")
-        self.assertEqual(prompt_id, "final_short_stub_01")
+        self.assertEqual(prompt["text"], "First short prompt")
+        self.assertEqual(prompt["id"], "final_short_stub_01")
 
     def test_get_prompt_for_tier_versioned_id(self):
         """Prompt ID should include version for reproducibility tracking."""
-        _, prompt_id = get_prompt_for_tier(self.suite, "medium")
+        prompt_id = get_prompt_for_tier(self.suite, "medium")["id"]
 
         self.assertEqual(prompt_id, "medium_smoke_v2")
         # Verify format: <tier>_smoke_v<version>
@@ -284,11 +286,12 @@ class TestPromptTierExtraction(unittest.TestCase):
     def test_get_prompt_for_tier_all_tiers(self):
         """Should work for all configured tiers."""
         for tier in ["short", "medium", "soak"]:
-            text, prompt_id = get_prompt_for_tier(self.suite, tier)
-            self.assertIsInstance(text, str)
-            self.assertIsInstance(prompt_id, str)
-            self.assertTrue(len(text) > 0)
-            self.assertTrue(len(prompt_id) > 0)
+            prompt = get_prompt_for_tier(self.suite, tier)
+            self.assertIsInstance(prompt["text"], str)
+            self.assertIsInstance(prompt["id"], str)
+            self.assertTrue(len(prompt["text"]) > 0)
+            self.assertTrue(len(prompt["id"]) > 0)
+            self.assertEqual(prompt["tier"], tier)
 
 
 class TestPromptSelection(unittest.TestCase):
@@ -343,27 +346,49 @@ class TestPromptSelection(unittest.TestCase):
         """Prompt ID selection should match id fields, not dictionary keys."""
         self.assertEqual(
             get_prompts(self.suite, prompt_id="final_long_02"),
-            [("Long prompt", "final_long_02")],
+            [
+                {
+                    "id": "final_long_02",
+                    "tier": "long",
+                    "text": "Long prompt",
+                }
+            ],
         )
 
         with self.assertRaises(KeyError):
             get_prompts(self.suite, prompt_id="alias_long")
+
+    def test_get_prompts_preserves_full_fixture_metadata(self):
+        """Selection should keep fixture metadata for later benchmark wiring."""
+        self.suite["prompts"]["short_a"]["fixture_prompt_token_count"] = 128
+
+        prompt = get_prompts(self.suite, prompt_id="final_short_01")[0]
+
+        self.assertEqual(prompt["fixture_prompt_token_count"], 128)
 
     def test_get_prompts_prompt_tier_returns_all_sorted_by_id(self):
         """Tier selection should return all matching prompts sorted by prompt ID."""
         self.assertEqual(
             get_prompts(self.suite, prompt_tier="short"),
             [
-                ("Short prompt A", "final_short_01"),
-                ("Short prompt B", "final_short_02"),
+                {
+                    "id": "final_short_01",
+                    "tier": "short",
+                    "text": "Short prompt A",
+                },
+                {
+                    "id": "final_short_02",
+                    "tier": "short",
+                    "text": "Short prompt B",
+                },
             ],
         )
 
     def test_get_prompts_all_final_excludes_soak_and_sorts_by_id(self):
         """All-final selection should include short/medium/long only, sorted by ID."""
         prompt_ids = [
-            prompt_id
-            for _, prompt_id in get_prompts(self.suite, all_final_prompts=True)
+            prompt["id"]
+            for prompt in get_prompts(self.suite, all_final_prompts=True)
         ]
 
         self.assertEqual(
@@ -381,7 +406,11 @@ class TestPromptSelection(unittest.TestCase):
         """Soak selection should resolve to the single fixed soak fixture."""
         self.assertEqual(
             get_soak_prompt(self.suite),
-            ("Soak prompt", "final_soak_01"),
+            {
+                "id": "final_soak_01",
+                "tier": "soak",
+                "text": "Soak prompt",
+            },
         )
 
     def test_soak_run_type_uses_soak_fixture_for_all_final_selection(self):
@@ -392,7 +421,13 @@ class TestPromptSelection(unittest.TestCase):
                 run_type="soak",
                 all_final_prompts=True,
             ),
-            [("Soak prompt", "final_soak_01")],
+            [
+                {
+                    "id": "final_soak_01",
+                    "tier": "soak",
+                    "text": "Soak prompt",
+                }
+            ],
         )
 
     def test_soak_run_type_rejects_non_soak_prompt_tier(self):
@@ -762,6 +797,56 @@ class TestCliValidation(unittest.TestCase):
         create_dir_mock.assert_not_called()
         run_mock.assert_not_called()
 
+    def test_main_extracts_prompt_text_and_id_from_fixture_object(self):
+        """CLI loop should pass text and id from prompt fixture objects."""
+        suite = {
+            "suite_type": "smoke",
+            "prompts": {
+                "short": {
+                    "tier": "short",
+                    "text": "Test prompt",
+                    "id": "short_smoke_v1",
+                    "fixture_prompt_token_count": 37,
+                }
+            },
+        }
+
+        with TemporaryDirectory() as temp_dir, patch(
+            "client.cli.load_prompt_suite",
+            return_value=suite,
+        ), patch(
+            "client.cli.create_result_directory",
+            return_value=Path(temp_dir),
+        ), patch(
+            "client.cli.run_benchmark",
+            return_value=SimpleNamespace(
+                ttft_ms=10.0,
+                decode_tps=2.5,
+                generated_token_count=3,
+            ),
+        ) as run_mock, patch(
+            "sys.stdout",
+            new_callable=io.StringIO,
+        ), patch(
+            "sys.argv",
+            [
+                "client.cli",
+                "--node",
+                "yoga",
+                "--backend",
+                "cpu",
+                "--run-type",
+                "warm",
+                "--prompt-tier",
+                "short",
+                "--mock",
+            ],
+        ):
+            cli_main()
+
+        self.assertEqual(run_mock.call_args.kwargs["prompt"], "Test prompt")
+        self.assertEqual(run_mock.call_args.kwargs["prompt_id"], "short_smoke_v1")
+
 
 class TestMatrixCliValidation(unittest.TestCase):
     """Tests for matrix run CLI validation."""
@@ -888,7 +973,7 @@ class TestMatrixCliValidation(unittest.TestCase):
         )
         self.assertEqual(
             run_matrix_mock.call_args.kwargs["prompts"],
-            [("Test prompt", "short_smoke_v1")],
+            [{"text": "Test prompt", "id": "short_smoke_v1"}],
         )
 
     def test_run_matrix_rejects_short_prompt_for_soak_only_regime(self):
@@ -993,12 +1078,27 @@ class TestMatrixCliValidation(unittest.TestCase):
         self.assertEqual(
             run_matrix_mock.call_args.kwargs["prompts"],
             [
-                ("Medium prompt", "medium_smoke_v1"),
-                ("Short prompt", "short_smoke_v1"),
+                {
+                    "tier": "medium",
+                    "text": "Medium prompt",
+                    "id": "medium_smoke_v1",
+                },
+                {
+                    "tier": "short",
+                    "text": "Short prompt",
+                    "id": "short_smoke_v1",
+                },
             ],
         )
         matrix_config = run_matrix_mock.call_args.kwargs["matrix_config"]
-        self.assertEqual(matrix_config.soak_prompt, ("Soak prompt", "soak_smoke_v1"))
+        self.assertEqual(
+            matrix_config.soak_prompt,
+            {
+                "tier": "soak",
+                "text": "Soak prompt",
+                "id": "soak_smoke_v1",
+            },
+        )
 
 
 if __name__ == "__main__":

@@ -871,7 +871,7 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
                 "short_smoke_v1": "short",
                 "soak_smoke_v1": "soak",
             },
-            soak_prompt=("Soak prompt", "soak_smoke_v1"),
+            soak_prompt={"text": "Soak prompt", "id": "soak_smoke_v1"},
             dry_run=False,
         )
 
@@ -879,7 +879,7 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
             output_dir = Path(temp_dir)
 
             run_matrix(
-                prompts=[("Test prompt", "short_smoke_v1")],
+                prompts=[{"text": "Test prompt", "id": "short_smoke_v1"}],
                 base_config=base_config,
                 matrix_config=matrix_config,
                 output_dir=output_dir,
@@ -947,7 +947,7 @@ class TestMatrixRunner(unittest.TestCase):
                 "short_smoke_v1": "short",
                 "soak_smoke_v1": "soak",
             },
-            soak_prompt=("Soak prompt", "soak_smoke_v1"),
+            soak_prompt={"text": "Soak prompt", "id": "soak_smoke_v1"},
             dry_run=False,
         )
 
@@ -955,7 +955,7 @@ class TestMatrixRunner(unittest.TestCase):
             output_dir = Path(temp_dir)
 
             results = run_matrix(
-                prompts=[("Test prompt", "short_smoke_v1")],
+                prompts=[{"text": "Test prompt", "id": "short_smoke_v1"}],
                 base_config=base_config,
                 matrix_config=matrix_config,
                 output_dir=output_dir,
@@ -986,7 +986,7 @@ class TestMatrixRunner(unittest.TestCase):
                 "short_smoke_v1": "short",
                 "soak_smoke_v1": "soak",
             },
-            soak_prompt=("Soak prompt", "soak_smoke_v1"),
+            soak_prompt={"text": "Soak prompt", "id": "soak_smoke_v1"},
             dry_run=False,
         )
 
@@ -994,7 +994,7 @@ class TestMatrixRunner(unittest.TestCase):
             output_dir = Path(temp_dir)
 
             results = run_matrix(
-                prompts=[("Test prompt", "short_smoke_v1")],
+                prompts=[{"text": "Test prompt", "id": "short_smoke_v1"}],
                 base_config=base_config,
                 matrix_config=matrix_config,
                 output_dir=output_dir,
@@ -1042,7 +1042,7 @@ class TestMatrixRunner(unittest.TestCase):
             output_dir = Path(temp_dir)
 
             results = run_matrix(
-                prompts=[("Test prompt", "short_smoke_v1")],
+                prompts=[{"text": "Test prompt", "id": "short_smoke_v1"}],
                 base_config=base_config,
                 matrix_config=matrix_config,
                 output_dir=output_dir,
@@ -1088,8 +1088,8 @@ class TestMatrixRunner(unittest.TestCase):
 
             results = run_matrix(
                 prompts=[
-                    ("Prompt A", "prompt_a"),
-                    ("Prompt B", "prompt_b"),
+                    {"text": "Prompt A", "id": "prompt_a"},
+                    {"text": "Prompt B", "id": "prompt_b"},
                 ],
                 base_config=base_config,
                 matrix_config=matrix_config,
@@ -1137,8 +1137,8 @@ class TestMatrixRunner(unittest.TestCase):
 
             run_matrix(
                 prompts=[
-                    ("Short prompt", "prompt_short"),
-                    ("Long prompt", "prompt_long"),
+                    {"text": "Short prompt", "id": "prompt_short"},
+                    {"text": "Long prompt", "id": "prompt_long"},
                 ],
                 base_config=base_config,
                 matrix_config=matrix_config,
@@ -1176,7 +1176,7 @@ class TestMatrixRunner(unittest.TestCase):
                 "prompt_medium": "medium",
                 "prompt_soak": "soak",
             },
-            soak_prompt=("Soak prompt", "prompt_soak"),
+            soak_prompt={"text": "Soak prompt", "id": "prompt_soak"},
             dry_run=False,
         )
 
@@ -1185,8 +1185,8 @@ class TestMatrixRunner(unittest.TestCase):
 
             run_matrix(
                 prompts=[
-                    ("Short prompt", "prompt_short"),
-                    ("Medium prompt", "prompt_medium"),
+                    {"text": "Short prompt", "id": "prompt_short"},
+                    {"text": "Medium prompt", "id": "prompt_medium"},
                 ],
                 base_config=base_config,
                 matrix_config=matrix_config,
@@ -1223,7 +1223,7 @@ class TestMatrixRunner(unittest.TestCase):
             repetitions=5,
             prompt_tier="soak",
             prompt_tiers_by_id={"soak_smoke_v1": "soak"},
-            soak_prompt=("Test prompt", "soak_smoke_v1"),
+            soak_prompt={"text": "Test prompt", "id": "soak_smoke_v1"},
             dry_run=False,
         )
 
@@ -1274,7 +1274,7 @@ class TestMatrixRunner(unittest.TestCase):
             output_dir = Path(temp_dir)
 
             results = run_matrix(
-                prompts=[("Test prompt", "short_smoke_v1")],
+                prompts=[{"text": "Test prompt", "id": "short_smoke_v1"}],
                 base_config=base_config,
                 matrix_config=matrix_config,
                 output_dir=output_dir,
@@ -1322,7 +1322,7 @@ class TestMatrixRunner(unittest.TestCase):
             output_dir = Path(temp_dir)
 
             run_matrix(
-                prompts=[("Test prompt", "short_smoke_v1")],
+                prompts=[{"text": "Test prompt", "id": "short_smoke_v1"}],
                 base_config=base_config,
                 matrix_config=matrix_config,
                 output_dir=output_dir,
@@ -1391,7 +1391,7 @@ class TestMatrixRunner(unittest.TestCase):
 
             with patch("client.benchmark.stream_completion", side_effect=mock_stream):
                 results = run_matrix(
-                    prompts=[("Test prompt", "short_smoke_v1")],
+                    prompts=[{"text": "Test prompt", "id": "short_smoke_v1"}],
                     base_config=base_config,
                     matrix_config=matrix_config,
                     output_dir=output_dir,

@@ -19,7 +19,7 @@ import uuid
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Dict, Iterator, List, Optional, Tuple
+from typing import Callable, Dict, Iterator, List, Optional
 
 import requests
 
@@ -671,7 +671,7 @@ class MatrixConfig:
     all_final_prompts: bool = False
     prompt_selection_mode: str = "prompt_tier"
     prompt_tiers_by_id: Optional[Dict[str, str]] = None
-    soak_prompt: Optional[Tuple[str, str]] = None
+    soak_prompt: Optional[dict] = None
     dry_run: bool = False  # If True, log actions but don't execute
 
 
@@ -716,7 +716,7 @@ def create_matrix_output_directory(
 def write_matrix_metadata(
     base_config: BenchmarkConfig,
     matrix_config: MatrixConfig,
-    prompts: List[Tuple[str, str]],
+    prompts: List[dict],
     output_dir: Path,
 ) -> Path:
     """Write metadata.json for the matrix run directory.
@@ -724,7 +724,7 @@ def write_matrix_metadata(
     Args:
         base_config: Base benchmark configuration
         matrix_config: Matrix configuration
-        prompts: Prompt selections as (prompt_text, prompt_id)
+        prompts: Prompt fixture objects
         output_dir: Output directory
 
     Returns:
@@ -786,12 +786,12 @@ def write_matrix_metadata(
 
 def _matrix_selected_prompt_ids(
     matrix_config: MatrixConfig,
-    prompts: List[Tuple[str, str]],
+    prompts: List[dict],
 ) -> List[str]:
     """Return matrix prompt IDs, including the fixed soak prompt when present."""
-    prompt_ids = [prompt_id for _, prompt_id in prompts]
+    prompt_ids = [prompt_obj["id"] for prompt_obj in prompts]
     if matrix_config.soak_prompt is not None:
-        soak_prompt_id = matrix_config.soak_prompt[1]
+        soak_prompt_id = matrix_config.soak_prompt["id"]
         if soak_prompt_id not in prompt_ids:
             prompt_ids.append(soak_prompt_id)
     return prompt_ids
@@ -799,9 +799,9 @@ def _matrix_selected_prompt_ids(
 
 def _prompts_for_regime(
     regime: str,
-    prompts: List[Tuple[str, str]],
+    prompts: List[dict],
     matrix_config: MatrixConfig,
-) -> List[Tuple[str, str]]:
+) -> List[dict]:
     """Resolve the prompt workload for a specific matrix regime."""
     prompt_tiers_by_id = matrix_config.prompt_tiers_by_id or {}
 
@@ -810,26 +810,27 @@ def _prompts_for_regime(
         if matrix_config.soak_prompt is not None:
             soak_prompts.append(matrix_config.soak_prompt)
         soak_prompts.extend(
-            (prompt, prompt_id)
-            for prompt, prompt_id in prompts
-            if prompt_tiers_by_id.get(prompt_id) == "soak"
+            prompt_obj
+            for prompt_obj in prompts
+            if prompt_tiers_by_id.get(prompt_obj["id"]) == "soak"
         )
         unique_soak_prompts = []
         seen_prompt_ids = set()
-        for prompt, prompt_id in soak_prompts:
+        for prompt_obj in soak_prompts:
+            prompt_id = prompt_obj["id"]
             if prompt_id in seen_prompt_ids:
                 continue
-            unique_soak_prompts.append((prompt, prompt_id))
+            unique_soak_prompts.append(prompt_obj)
             seen_prompt_ids.add(prompt_id)
         if len(unique_soak_prompts) != 1:
             raise ValueError("Soak regime requires exactly one fixed soak prompt")
         return unique_soak_prompts
 
     normal_prompts = [
-        (prompt, prompt_id)
-        for prompt, prompt_id in prompts
+        prompt_obj
+        for prompt_obj in prompts
         if prompt_tiers_by_id.get(
-            prompt_id,
+            prompt_obj["id"],
             matrix_config.prompt_tier or "",
         ) != "soak"
     ]
@@ -839,7 +840,7 @@ def _prompts_for_regime(
 
 
 def run_matrix(
-    prompts: List[Tuple[str, str]],
+    prompts: List[dict],
     base_config: BenchmarkConfig,
     matrix_config: MatrixConfig,
     output_dir: Optional[Path] = None,
@@ -869,7 +870,7 @@ def run_matrix(
       Falling Decode TPS is expected due to thermal throttling.
 
     Args:
-        prompts: Prompt selections as (prompt_text, prompt_id)
+        prompts: Prompt fixture objects
         base_config: Base benchmark configuration (run_type will be overridden per regime)
         matrix_config: Matrix configuration specifying regimes and repetitions
         output_dir: Override output directory (auto-generated if None)
@@ -900,7 +901,9 @@ def run_matrix(
         if on_regime_start is not None:
             on_regime_start(regime)
 
-        for prompt, prompt_id in _prompts_for_regime(regime, prompts, matrix_config):
+        for prompt_obj in _prompts_for_regime(regime, prompts, matrix_config):
+            prompt = prompt_obj["text"]
+            prompt_id = prompt_obj["id"]
             if regime == "soak":
                 prompt_tier = "soak"
             else:

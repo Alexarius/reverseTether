@@ -12,7 +12,6 @@ import json
 import sys
 from dataclasses import replace
 from pathlib import Path
-from typing import List, Tuple
 
 from .benchmark import (
     BenchmarkConfig,
@@ -167,8 +166,8 @@ def get_prompts(
     prompt_tier: str | None = None,
     prompt_id: str | None = None,
     all_final_prompts: bool = False,
-) -> List[Tuple[str, str]]:
-    """Return selected prompts as (prompt_text, prompt_id), sorted where applicable."""
+) -> list[dict]:
+    """Return selected prompt fixture objects, sorted where applicable."""
     validate_prompt_selection(prompt_tier, prompt_id, all_final_prompts)
 
     prompt_items = suite["prompts"].items()
@@ -176,7 +175,7 @@ def get_prompts(
     if prompt_id is not None:
         for _, prompt_data in prompt_items:
             if prompt_data["id"] == prompt_id:
-                return [(prompt_data["text"], prompt_data["id"])]
+                return [prompt_data]
         raise KeyError(prompt_id)
 
     if prompt_tier is not None:
@@ -187,10 +186,7 @@ def get_prompts(
         ]
         if not selected:
             raise KeyError(prompt_tier)
-        return [
-            (prompt_data["text"], prompt_data["id"])
-            for prompt_data in sorted(selected, key=lambda item: item["id"])
-        ]
+        return sorted(selected, key=lambda item: item["id"])
 
     selected = [
         prompt_data
@@ -199,13 +195,10 @@ def get_prompts(
     ]
     if not selected:
         raise KeyError("all_final_prompts")
-    return [
-        (prompt_data["text"], prompt_data["id"])
-        for prompt_data in sorted(selected, key=lambda item: item["id"])
-    ]
+    return sorted(selected, key=lambda item: item["id"])
 
 
-def get_soak_prompt(suite: dict) -> Tuple[str, str]:
+def get_soak_prompt(suite: dict) -> dict:
     """Return the single fixed soak prompt fixture."""
     selected = [
         prompt_data
@@ -217,8 +210,7 @@ def get_soak_prompt(suite: dict) -> Tuple[str, str]:
             "Prompt suite must define exactly one fixed soak prompt fixture"
         )
 
-    prompt_data = selected[0]
-    return prompt_data["text"], prompt_data["id"]
+    return selected[0]
 
 
 def get_prompt_tier_by_id(suite: dict) -> dict[str, str]:
@@ -244,7 +236,7 @@ def get_prompts_for_run_type(
     prompt_tier: str | None = None,
     prompt_id: str | None = None,
     all_final_prompts: bool = False,
-) -> List[Tuple[str, str]]:
+) -> list[dict]:
     """Return prompts that are valid for a single run regime."""
     validate_prompt_selection(prompt_tier, prompt_id, all_final_prompts)
 
@@ -266,24 +258,24 @@ def get_prompts_for_run_type(
     )
     prompt_tiers_by_id = get_prompt_tier_by_id(suite)
     soak_prompt_ids = [
-        selected_prompt_id
-        for _, selected_prompt_id in prompts
-        if prompt_tiers_by_id[selected_prompt_id] == SOAK_PROMPT_TIER
+        prompt_obj["id"]
+        for prompt_obj in prompts
+        if prompt_tiers_by_id[prompt_obj["id"]] == SOAK_PROMPT_TIER
     ]
     if soak_prompt_ids:
         raise ValueError("Cold and warm regimes cannot use the soak prompt fixture")
     return prompts
 
 
-def get_prompt_for_tier(suite: dict, tier: str) -> tuple[str, str]:
-    """Get the prompt text and ID for a given tier.
+def get_prompt_for_tier(suite: dict, tier: str) -> dict:
+    """Get the first prompt fixture object for a given tier.
 
     Args:
         suite: Loaded prompt suite dictionary
         tier: Prompt tier (short, medium, long, soak)
 
     Returns:
-        Tuple of (prompt_text, prompt_id)
+        Prompt fixture object
 
     Raises:
         KeyError: If tier not found in suite
@@ -585,7 +577,9 @@ Mock mode:
         print(f"  Server: {config.host}:{config.port}")
     print()
 
-    for prompt_text, prompt_id in prompts:
+    for prompt_obj in prompts:
+        prompt_text = prompt_obj["text"]
+        prompt_id = prompt_obj["id"]
         prompt_config = replace(config, prompt_tier=prompt_tiers_by_id[prompt_id])
         if len(prompts) > 1:
             print(f"Prompt {prompt_id}...")
