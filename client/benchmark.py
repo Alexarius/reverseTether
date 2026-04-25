@@ -19,7 +19,7 @@ import uuid
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Iterator, Optional, List, Callable
+from typing import Callable, Dict, Iterator, List, Optional, Tuple
 
 import requests
 
@@ -602,7 +602,11 @@ class MatrixConfig:
 
     regimes: List[str]  # e.g., ["cold", "warm", "soak"]
     repetitions: int  # Number of repetitions per regime
-    prompt_tier: str  # short, medium, long, soak
+    prompt_tier: Optional[str] = None  # short, medium, long, soak
+    prompt_id: Optional[str] = None
+    all_final_prompts: bool = False
+    prompt_selection_mode: str = "prompt_tier"
+    prompt_tiers_by_id: Optional[Dict[str, str]] = None
     dry_run: bool = False  # If True, log actions but don't execute
 
 
@@ -613,6 +617,7 @@ class MatrixRunResult:
     regime: str
     repetition_index: int
     success: bool
+    prompt_id: str = ""
     record: Optional[RunRecord] = None
     error_message: str = ""
 
@@ -646,6 +651,7 @@ def create_matrix_output_directory(
 def write_matrix_metadata(
     base_config: BenchmarkConfig,
     matrix_config: MatrixConfig,
+    prompts: List[Tuple[str, str]],
     output_dir: Path,
 ) -> Path:
     """Write metadata.json for the matrix run directory.
@@ -653,6 +659,7 @@ def write_matrix_metadata(
     Args:
         base_config: Base benchmark configuration
         matrix_config: Matrix configuration
+        prompts: Prompt selections as (prompt_text, prompt_id)
         output_dir: Output directory
 
     Returns:
@@ -663,7 +670,11 @@ def write_matrix_metadata(
         "run_type": "matrix",
         "regimes": matrix_config.regimes,
         "repetitions": matrix_config.repetitions,
+        "prompt_selection_mode": matrix_config.prompt_selection_mode,
         "prompt_tier": matrix_config.prompt_tier,
+        "prompt_id": matrix_config.prompt_id,
+        "all_final_prompts": matrix_config.all_final_prompts,
+        "selected_prompt_ids": [prompt_id for _, prompt_id in prompts],
         "dry_run": matrix_config.dry_run,
         "node": base_config.node,
         "backend": base_config.backend,
@@ -709,8 +720,7 @@ def write_matrix_metadata(
 
 
 def run_matrix(
-    prompt: str,
-    prompt_id: str,
+    prompts: List[Tuple[str, str]],
     base_config: BenchmarkConfig,
     matrix_config: MatrixConfig,
     output_dir: Optional[Path] = None,
@@ -722,10 +732,11 @@ def run_matrix(
     The matrix runner executes benchmarks in this order:
     1. For each regime in matrix_config.regimes:
        a. Call on_regime_start callback (for cold starts, user must restart server)
-       b. For each repetition in range(matrix_config.repetitions):
-          - Execute benchmark run
-          - Record result
-          - Call on_run_complete callback
+       b. For each prompt in prompts:
+          - For each repetition in range(matrix_config.repetitions):
+            - Execute benchmark run
+            - Record result
+            - Call on_run_complete callback
 
     CRITICAL MEASUREMENT INTEGRITY NOTES:
     - Cold regime: The caller is responsible for ensuring the server is restarted
@@ -736,8 +747,7 @@ def run_matrix(
       Falling Decode TPS is expected due to thermal throttling.
 
     Args:
-        prompt: The prompt text to send
-        prompt_id: Identifier for the prompt
+        prompts: Prompt selections as (prompt_text, prompt_id)
         base_config: Base benchmark configuration (run_type will be overridden per regime)
         matrix_config: Matrix configuration specifying regimes and repetitions
         output_dir: Override output directory (auto-generated if None)
@@ -758,88 +768,93 @@ def run_matrix(
     actual_output_dir = create_matrix_output_directory(base_config, output_dir)
 
     # Write matrix metadata
-    write_matrix_metadata(base_config, matrix_config, actual_output_dir)
+    write_matrix_metadata(base_config, matrix_config, prompts, actual_output_dir)
 
     results: List[MatrixRunResult] = []
+    prompt_tiers_by_id = matrix_config.prompt_tiers_by_id or {}
 
     for regime in matrix_config.regimes:
         # Signal regime start (caller should handle cold restart if needed)
         if on_regime_start is not None:
             on_regime_start(regime)
 
-        for rep_idx in range(matrix_config.repetitions):
-            # Create config for this specific run
-            run_config = BenchmarkConfig(
-                node=base_config.node,
-                backend=base_config.backend,
-                run_type=regime,  # Override with current regime
-                prompt_tier=matrix_config.prompt_tier,
-                host=base_config.host,
-                port=base_config.port,
-                server_mode=base_config.server_mode,
-                temperature=base_config.temperature,
-                seed=base_config.seed,
-                max_tokens=base_config.max_tokens,
-                model_name=base_config.model_name,
-                model_filename=base_config.model_filename,
-                model_sha256=base_config.model_sha256,
-                parameter_count=base_config.parameter_count,
-                quantization=base_config.quantization,
-                laptop_identifier=base_config.laptop_identifier,
-                phone_identifier=base_config.phone_identifier,
-                os_build_metadata=base_config.os_build_metadata,
-                llama_cpp_commit=base_config.llama_cpp_commit,
-                llama_cpp_build_flags=base_config.llama_cpp_build_flags,
-                server_launch_args=base_config.server_launch_args,
-                start_temperature_c=base_config.start_temperature_c,
-                end_temperature_c=base_config.end_temperature_c,
-                temperature_source=base_config.temperature_source,
-                start_battery_level_percent=base_config.start_battery_level_percent,
-                end_battery_level_percent=base_config.end_battery_level_percent,
-                battery_status=base_config.battery_status,
-                background_apps_minimized=base_config.background_apps_minimized,
-                known_anomalies=base_config.known_anomalies,
-                mock=base_config.mock,
-            )
+        for prompt, prompt_id in prompts:
+            prompt_tier = prompt_tiers_by_id.get(prompt_id, matrix_config.prompt_tier or "")
 
-            result = MatrixRunResult(
-                regime=regime,
-                repetition_index=rep_idx,
-                success=False,
-            )
+            for rep_idx in range(matrix_config.repetitions):
+                # Create config for this specific run
+                run_config = BenchmarkConfig(
+                    node=base_config.node,
+                    backend=base_config.backend,
+                    run_type=regime,  # Override with current regime
+                    prompt_tier=prompt_tier,
+                    host=base_config.host,
+                    port=base_config.port,
+                    server_mode=base_config.server_mode,
+                    temperature=base_config.temperature,
+                    seed=base_config.seed,
+                    max_tokens=base_config.max_tokens,
+                    model_name=base_config.model_name,
+                    model_filename=base_config.model_filename,
+                    model_sha256=base_config.model_sha256,
+                    parameter_count=base_config.parameter_count,
+                    quantization=base_config.quantization,
+                    laptop_identifier=base_config.laptop_identifier,
+                    phone_identifier=base_config.phone_identifier,
+                    os_build_metadata=base_config.os_build_metadata,
+                    llama_cpp_commit=base_config.llama_cpp_commit,
+                    llama_cpp_build_flags=base_config.llama_cpp_build_flags,
+                    server_launch_args=base_config.server_launch_args,
+                    start_temperature_c=base_config.start_temperature_c,
+                    end_temperature_c=base_config.end_temperature_c,
+                    temperature_source=base_config.temperature_source,
+                    start_battery_level_percent=base_config.start_battery_level_percent,
+                    end_battery_level_percent=base_config.end_battery_level_percent,
+                    battery_status=base_config.battery_status,
+                    background_apps_minimized=base_config.background_apps_minimized,
+                    known_anomalies=base_config.known_anomalies,
+                    mock=base_config.mock,
+                )
 
-            if matrix_config.dry_run:
-                # Dry run: log intent but don't execute
-                result.success = True
-                result.error_message = "dry_run"
-            else:
-                try:
-                    record = run_benchmark(
-                        prompt=prompt,
-                        prompt_id=prompt_id,
-                        config=run_config,
-                        output_dir=actual_output_dir,
-                        repetition_index=rep_idx,
-                        skip_metadata=True,  # Matrix metadata already written
-                    )
+                result = MatrixRunResult(
+                    regime=regime,
+                    prompt_id=prompt_id,
+                    repetition_index=rep_idx,
+                    success=False,
+                )
+
+                if matrix_config.dry_run:
+                    # Dry run: log intent but don't execute
                     result.success = True
-                    result.record = record
-                except Exception as e:
-                    # Log failure but continue with matrix
-                    # CRITICAL: Do not silently skip - capture the error for audit
-                    result.success = False
-                    result.error_message = str(e)
-                    result.record = create_failed_run_record(
-                        prompt_id=prompt_id,
-                        config=run_config,
-                        repetition_index=rep_idx,
-                        error_message=result.error_message,
-                    )
-                    write_run_record(result.record, actual_output_dir)
+                    result.error_message = "dry_run"
+                else:
+                    try:
+                        record = run_benchmark(
+                            prompt=prompt,
+                            prompt_id=prompt_id,
+                            config=run_config,
+                            output_dir=actual_output_dir,
+                            repetition_index=rep_idx,
+                            skip_metadata=True,  # Matrix metadata already written
+                        )
+                        result.success = True
+                        result.record = record
+                    except Exception as e:
+                        # Log failure but continue with matrix
+                        # CRITICAL: Do not silently skip - capture the error for audit
+                        result.success = False
+                        result.error_message = str(e)
+                        result.record = create_failed_run_record(
+                            prompt_id=prompt_id,
+                            config=run_config,
+                            repetition_index=rep_idx,
+                            error_message=result.error_message,
+                        )
+                        write_run_record(result.record, actual_output_dir)
 
-            results.append(result)
+                results.append(result)
 
-            if on_run_complete is not None:
-                on_run_complete(result)
+                if on_run_complete is not None:
+                    on_run_complete(result)
 
     return results

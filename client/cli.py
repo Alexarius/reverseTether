@@ -10,7 +10,9 @@ No elaborate UI - just command-line interface for measurement.
 import argparse
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
+from typing import List, Tuple
 
 from .benchmark import (
     BenchmarkConfig,
@@ -21,6 +23,7 @@ from .benchmark import (
 
 
 FINAL_DATASET_BUCKET_COUNTS = {"short": 5, "medium": 5, "long": 5, "soak": 1}
+FINAL_PROMPT_TIERS = {"short", "medium", "long"}
 VALID_SUITE_TYPES = {"smoke", "final_dataset"}
 
 
@@ -96,6 +99,75 @@ def load_prompt_suite(suite_path: Path) -> dict:
     return suite
 
 
+def validate_prompt_selection(
+    prompt_tier: str | None = None,
+    prompt_id: str | None = None,
+    all_final_prompts: bool = False,
+) -> None:
+    """Require exactly one prompt selection mode."""
+    selected_modes = [
+        prompt_tier is not None,
+        prompt_id is not None,
+        all_final_prompts,
+    ]
+    if sum(selected_modes) != 1:
+        raise ValueError(
+            "Exactly one of --prompt-tier, --prompt-id, or --all-final-prompts "
+            "must be provided"
+        )
+
+
+def get_prompts(
+    suite: dict,
+    prompt_tier: str | None = None,
+    prompt_id: str | None = None,
+    all_final_prompts: bool = False,
+) -> List[Tuple[str, str]]:
+    """Return selected prompts as (prompt_text, prompt_id), sorted where applicable."""
+    validate_prompt_selection(prompt_tier, prompt_id, all_final_prompts)
+
+    prompt_items = suite["prompts"].items()
+
+    if prompt_id is not None:
+        for _, prompt_data in prompt_items:
+            if prompt_data["id"] == prompt_id:
+                return [(prompt_data["text"], prompt_data["id"])]
+        raise KeyError(prompt_id)
+
+    if prompt_tier is not None:
+        selected = [
+            prompt_data
+            for prompt_key, prompt_data in prompt_items
+            if prompt_data.get("tier", prompt_key) == prompt_tier
+        ]
+        if not selected:
+            raise KeyError(prompt_tier)
+        return [
+            (prompt_data["text"], prompt_data["id"])
+            for prompt_data in sorted(selected, key=lambda item: item["id"])
+        ]
+
+    selected = [
+        prompt_data
+        for prompt_key, prompt_data in prompt_items
+        if prompt_data.get("tier", prompt_key) in FINAL_PROMPT_TIERS
+    ]
+    if not selected:
+        raise KeyError("all_final_prompts")
+    return [
+        (prompt_data["text"], prompt_data["id"])
+        for prompt_data in sorted(selected, key=lambda item: item["id"])
+    ]
+
+
+def get_prompt_tier_by_id(suite: dict) -> dict[str, str]:
+    """Map prompt IDs to tiers for per-run log metadata."""
+    return {
+        prompt_data["id"]: prompt_data.get("tier", prompt_key)
+        for prompt_key, prompt_data in suite["prompts"].items()
+    }
+
+
 def get_prompt_for_tier(suite: dict, tier: str) -> tuple[str, str]:
     """Get the prompt text and ID for a given tier.
 
@@ -109,17 +181,7 @@ def get_prompt_for_tier(suite: dict, tier: str) -> tuple[str, str]:
     Raises:
         KeyError: If tier not found in suite
     """
-    prompts = suite["prompts"]
-    if tier in prompts:
-        prompt_data = prompts[tier]
-        if prompt_data.get("tier", tier) == tier:
-            return prompt_data["text"], prompt_data["id"]
-
-    for prompt_data in prompts.values():
-        if prompt_data.get("tier") == tier:
-            return prompt_data["text"], prompt_data["id"]
-
-    raise KeyError(tier)
+    return get_prompts(suite, prompt_tier=tier)[0]
 
 
 def main():
@@ -169,9 +231,19 @@ Mock mode:
     )
     parser.add_argument(
         "--prompt-tier",
-        required=True,
+        default=None,
         choices=["short", "medium", "long", "soak"],
         help="Prompt tier from suite"
+    )
+    parser.add_argument(
+        "--prompt-id",
+        default=None,
+        help="Exact prompt ID from suite"
+    )
+    parser.add_argument(
+        "--all-final-prompts",
+        action="store_true",
+        help="Run all final prompts from short, medium, and long tiers"
     )
     parser.add_argument(
         "--host",
@@ -321,19 +393,28 @@ Mock mode:
         print(f"Error: Invalid prompt suite: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # Get prompt for the specified tier
+    # Get prompt selection.
     try:
-        prompt_text, prompt_id = get_prompt_for_tier(suite, args.prompt_tier)
-    except KeyError:
-        print(f"Error: Prompt tier '{args.prompt_tier}' not found in suite", file=sys.stderr)
+        prompts = get_prompts(
+            suite,
+            prompt_tier=args.prompt_tier,
+            prompt_id=args.prompt_id,
+            all_final_prompts=args.all_final_prompts,
+        )
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
+    except KeyError as e:
+        print(f"Error: Prompt selection '{e.args[0]}' not found in suite", file=sys.stderr)
+        sys.exit(1)
+    prompt_tiers_by_id = get_prompt_tier_by_id(suite)
 
     # Build configuration
     config = BenchmarkConfig(
         node=args.node,
         backend=args.backend,
         run_type=args.run_type,
-        prompt_tier=args.prompt_tier,
+        prompt_tier=args.prompt_tier or "",
         host=args.host,
         port=args.port,
         server_mode=args.server_mode,
@@ -376,7 +457,13 @@ Mock mode:
     print(f"  Node: {config.node}")
     print(f"  Backend: {config.backend}")
     print(f"  Run type: {config.run_type}")
-    print(f"  Prompt tier: {config.prompt_tier}")
+    if args.prompt_tier is not None:
+        print(f"  Prompt tier: {args.prompt_tier}")
+    elif args.prompt_id is not None:
+        print(f"  Prompt ID: {args.prompt_id}")
+    else:
+        print("  Prompt selection: all final non-soak prompts")
+    print(f"  Selected prompts: {len(prompts)}")
     print(f"  Server mode: {config.server_mode}")
     if config.mock:
         print("  Mode: MOCK (no server connection)")
@@ -384,26 +471,34 @@ Mock mode:
         print(f"  Server: {config.host}:{config.port}")
     print()
 
-    for i in range(args.repetitions):
-        print(f"Repetition {i + 1}/{args.repetitions}...", end=" ", flush=True)
+    for prompt_text, prompt_id in prompts:
+        prompt_config = replace(config, prompt_tier=prompt_tiers_by_id[prompt_id])
+        if len(prompts) > 1:
+            print(f"Prompt {prompt_id}...")
 
-        try:
-            record = run_benchmark(
-                prompt=prompt_text,
-                prompt_id=prompt_id,
-                config=config,
-                output_dir=output_dir,
-                repetition_index=i
-            )
+        for i in range(args.repetitions):
+            print(f"Repetition {i + 1}/{args.repetitions}...", end=" ", flush=True)
 
-            # Report results
-            ttft_str = f"{record.ttft_ms:.1f}ms" if record.ttft_ms else "N/A"
-            tps_str = f"{record.decode_tps:.2f}" if record.decode_tps else "N/A"
-            print(f"TTFT: {ttft_str}, Decode TPS: {tps_str}, Tokens: {record.generated_token_count}")
+            try:
+                record = run_benchmark(
+                    prompt=prompt_text,
+                    prompt_id=prompt_id,
+                    config=prompt_config,
+                    output_dir=output_dir,
+                    repetition_index=i
+                )
 
-        except Exception as e:
-            print(f"FAILED: {e}", file=sys.stderr)
-            sys.exit(1)
+                # Report results
+                ttft_str = f"{record.ttft_ms:.1f}ms" if record.ttft_ms else "N/A"
+                tps_str = f"{record.decode_tps:.2f}" if record.decode_tps else "N/A"
+                print(
+                    f"TTFT: {ttft_str}, Decode TPS: {tps_str}, "
+                    f"Tokens: {record.generated_token_count}"
+                )
+
+            except Exception as e:
+                print(f"FAILED: {e}", file=sys.stderr)
+                sys.exit(1)
 
     print()
     print(f"Results written to: {output_dir / 'raw_metrics.jsonl'}")

@@ -18,7 +18,7 @@ from .benchmark import (
     run_matrix,
     validate_reproducibility_fields,
 )
-from .cli import get_prompt_for_tier, load_prompt_suite
+from .cli import get_prompt_tier_by_id, get_prompts, load_prompt_suite
 
 
 def build_config_from_args(args: argparse.Namespace) -> BenchmarkConfig:
@@ -27,7 +27,7 @@ def build_config_from_args(args: argparse.Namespace) -> BenchmarkConfig:
         node=args.node,
         backend=args.backend,
         run_type="warm",
-        prompt_tier=args.prompt_tier,
+        prompt_tier=args.prompt_tier or "",
         host=args.host,
         port=args.port,
         server_mode=args.server_mode,
@@ -95,9 +95,19 @@ Examples:
     )
     parser.add_argument(
         "--prompt-tier",
-        required=True,
+        default=None,
         choices=["short", "medium", "long", "soak"],
         help="Prompt tier from suite"
+    )
+    parser.add_argument(
+        "--prompt-id",
+        default=None,
+        help="Exact prompt ID from suite"
+    )
+    parser.add_argument(
+        "--all-final-prompts",
+        action="store_true",
+        help="Run all final prompts from short, medium, and long tiers"
     )
     parser.add_argument(
         "--host",
@@ -252,12 +262,24 @@ Examples:
     except json.JSONDecodeError as e:
         print(f"Error: Invalid JSON in prompt suite: {e}", file=sys.stderr)
         sys.exit(1)
+    except ValueError as e:
+        print(f"Error: Invalid prompt suite: {e}", file=sys.stderr)
+        sys.exit(1)
 
     try:
-        prompt_text, prompt_id = get_prompt_for_tier(suite, args.prompt_tier)
-    except KeyError:
-        print(f"Error: Prompt tier '{args.prompt_tier}' not found in suite", file=sys.stderr)
+        prompts = get_prompts(
+            suite,
+            prompt_tier=args.prompt_tier,
+            prompt_id=args.prompt_id,
+            all_final_prompts=args.all_final_prompts,
+        )
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
+    except KeyError as e:
+        print(f"Error: Prompt selection '{e.args[0]}' not found in suite", file=sys.stderr)
+        sys.exit(1)
+    prompt_tiers_by_id = get_prompt_tier_by_id(suite)
 
     regimes = [regime.strip() for regime in args.regimes.split(",")]
     valid_regimes = {"cold", "warm", "soak"}
@@ -274,10 +296,21 @@ Examples:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
+    if args.prompt_tier is not None:
+        prompt_selection_mode = "prompt_tier"
+    elif args.prompt_id is not None:
+        prompt_selection_mode = "prompt_id"
+    else:
+        prompt_selection_mode = "all_final_prompts"
+
     matrix_config = MatrixConfig(
         regimes=regimes,
         repetitions=args.repetitions,
         prompt_tier=args.prompt_tier,
+        prompt_id=args.prompt_id,
+        all_final_prompts=args.all_final_prompts,
+        prompt_selection_mode=prompt_selection_mode,
+        prompt_tiers_by_id=prompt_tiers_by_id,
         dry_run=args.dry_run,
     )
 
@@ -288,12 +321,18 @@ Examples:
         requested_output_dir = Path(args.output_dir)
     output_dir = create_matrix_output_directory(base_config, requested_output_dir)
 
-    total_runs = len(regimes) * args.repetitions
+    total_runs = len(regimes) * len(prompts) * args.repetitions
     print("Matrix Benchmark Run")
     print("=" * 40)
     print(f"  Node: {base_config.node}")
     print(f"  Backend: {base_config.backend}")
-    print(f"  Prompt tier: {args.prompt_tier}")
+    if args.prompt_tier is not None:
+        print(f"  Prompt tier: {args.prompt_tier}")
+    elif args.prompt_id is not None:
+        print(f"  Prompt ID: {args.prompt_id}")
+    else:
+        print("  Prompt selection: all final non-soak prompts")
+    print(f"  Selected prompts: {len(prompts)}")
     print(f"  Server mode: {base_config.server_mode}")
     print(f"  Regimes: {', '.join(regimes)}")
     print(f"  Repetitions per regime: {args.repetitions}")
@@ -327,23 +366,27 @@ Examples:
                 ttft_str = f"{result.record.ttft_ms:.1f}ms" if result.record.ttft_ms else "N/A"
                 tps_str = f"{result.record.decode_tps:.2f}" if result.record.decode_tps else "N/A"
                 print(
-                    f"  [{result.regime}] Rep {rep_display}/{args.repetitions}: "
+                    f"  [{result.regime}] {result.prompt_id} "
+                    f"Rep {rep_display}/{args.repetitions}: "
                     f"TTFT: {ttft_str}, Decode TPS: {tps_str}, "
                     f"Tokens: {result.record.generated_token_count}"
                 )
             elif args.dry_run:
-                print(f"  [{result.regime}] Rep {rep_display}/{args.repetitions}: DRY RUN")
+                print(
+                    f"  [{result.regime}] {result.prompt_id} "
+                    f"Rep {rep_display}/{args.repetitions}: DRY RUN"
+                )
         else:
             failure_count += 1
             print(
-                f"  [{result.regime}] Rep {rep_display}/{args.repetitions}: "
+                f"  [{result.regime}] {result.prompt_id} "
+                f"Rep {rep_display}/{args.repetitions}: "
                 f"FAILED - {result.error_message}",
                 file=sys.stderr,
             )
 
     run_matrix(
-        prompt=prompt_text,
-        prompt_id=prompt_id,
+        prompts=prompts,
         base_config=base_config,
         matrix_config=matrix_config,
         output_dir=output_dir,

@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from client.cli import (
     get_prompt_for_tier,
+    get_prompts,
     load_prompt_suite,
     main as cli_main,
     validate_prompt_suite,
@@ -235,6 +236,93 @@ class TestPromptTierExtraction(unittest.TestCase):
             self.assertTrue(len(prompt_id) > 0)
 
 
+class TestPromptSelection(unittest.TestCase):
+    """Tests for prompt selection modes and deterministic ordering."""
+
+    def setUp(self):
+        self.suite = {
+            "version": "1.0.0",
+            "suite_type": "final_dataset",
+            "prompts": {
+                "alias_long": {
+                    "id": "final_long_02",
+                    "tier": "long",
+                    "text": "Long prompt",
+                },
+                "short_b": {
+                    "id": "final_short_02",
+                    "tier": "short",
+                    "text": "Short prompt B",
+                },
+                "soak": {
+                    "id": "final_soak_01",
+                    "tier": "soak",
+                    "text": "Soak prompt",
+                },
+                "short_a": {
+                    "id": "final_short_01",
+                    "tier": "short",
+                    "text": "Short prompt A",
+                },
+                "medium": {
+                    "id": "final_medium_01",
+                    "tier": "medium",
+                    "text": "Medium prompt",
+                },
+            },
+        }
+
+    def test_get_prompts_requires_exactly_one_selection_mode(self):
+        """Prompt selection must fail fast when mode is missing or ambiguous."""
+        with self.assertRaisesRegex(ValueError, "Exactly one"):
+            get_prompts(self.suite)
+
+        with self.assertRaisesRegex(ValueError, "Exactly one"):
+            get_prompts(
+                self.suite,
+                prompt_tier="short",
+                prompt_id="final_short_01",
+            )
+
+    def test_get_prompts_prompt_id_exact_match(self):
+        """Prompt ID selection should match id fields, not dictionary keys."""
+        self.assertEqual(
+            get_prompts(self.suite, prompt_id="final_long_02"),
+            [("Long prompt", "final_long_02")],
+        )
+
+        with self.assertRaises(KeyError):
+            get_prompts(self.suite, prompt_id="alias_long")
+
+    def test_get_prompts_prompt_tier_returns_all_sorted_by_id(self):
+        """Tier selection should return all matching prompts sorted by prompt ID."""
+        self.assertEqual(
+            get_prompts(self.suite, prompt_tier="short"),
+            [
+                ("Short prompt A", "final_short_01"),
+                ("Short prompt B", "final_short_02"),
+            ],
+        )
+
+    def test_get_prompts_all_final_excludes_soak_and_sorts_by_id(self):
+        """All-final selection should include short/medium/long only, sorted by ID."""
+        prompt_ids = [
+            prompt_id
+            for _, prompt_id in get_prompts(self.suite, all_final_prompts=True)
+        ]
+
+        self.assertEqual(
+            prompt_ids,
+            [
+                "final_long_02",
+                "final_medium_01",
+                "final_short_01",
+                "final_short_02",
+            ],
+        )
+        self.assertNotIn("final_soak_01", prompt_ids)
+
+
 class TestRealPromptSuiteIntegrity(unittest.TestCase):
     """Integration tests for the actual configs/prompts/smoke_suite.json file.
 
@@ -438,6 +526,74 @@ class TestRealPromptSuiteIntegrity(unittest.TestCase):
 class TestCliValidation(unittest.TestCase):
     """Tests for CLI fail-fast validation of reproducibility fields."""
 
+    def test_main_rejects_missing_prompt_selector(self):
+        """CLI should require one prompt selector before creating output."""
+        suite = {
+            "suite_type": "smoke",
+            "prompts": {"short": {"text": "Test prompt", "id": "short_smoke_v1"}},
+        }
+
+        with patch("client.cli.load_prompt_suite", return_value=suite), patch(
+            "client.cli.create_result_directory"
+        ) as create_dir_mock, patch("client.cli.run_benchmark") as run_mock, patch(
+            "sys.stderr",
+            new_callable=io.StringIO,
+        ), patch(
+            "sys.argv",
+            [
+                "client.cli",
+                "--node",
+                "yoga",
+                "--backend",
+                "cpu",
+                "--run-type",
+                "warm",
+                "--mock",
+            ],
+        ):
+            with self.assertRaises(SystemExit) as exc:
+                cli_main()
+
+        self.assertEqual(exc.exception.code, 1)
+        create_dir_mock.assert_not_called()
+        run_mock.assert_not_called()
+
+    def test_main_rejects_multiple_prompt_selectors(self):
+        """CLI should reject ambiguous prompt selector combinations."""
+        suite = {
+            "suite_type": "smoke",
+            "prompts": {"short": {"text": "Test prompt", "id": "short_smoke_v1"}},
+        }
+
+        with patch("client.cli.load_prompt_suite", return_value=suite), patch(
+            "client.cli.create_result_directory"
+        ) as create_dir_mock, patch("client.cli.run_benchmark") as run_mock, patch(
+            "sys.stderr",
+            new_callable=io.StringIO,
+        ), patch(
+            "sys.argv",
+            [
+                "client.cli",
+                "--node",
+                "yoga",
+                "--backend",
+                "cpu",
+                "--run-type",
+                "warm",
+                "--prompt-tier",
+                "short",
+                "--prompt-id",
+                "short_smoke_v1",
+                "--mock",
+            ],
+        ):
+            with self.assertRaises(SystemExit) as exc:
+                cli_main()
+
+        self.assertEqual(exc.exception.code, 1)
+        create_dir_mock.assert_not_called()
+        run_mock.assert_not_called()
+
     def test_main_exits_before_running_when_hashes_are_missing(self):
         """Real runs should exit non-zero before directory creation if hashes are missing."""
         suite = {
@@ -475,6 +631,42 @@ class TestCliValidation(unittest.TestCase):
 
 class TestMatrixCliValidation(unittest.TestCase):
     """Tests for matrix run CLI validation."""
+
+    def test_run_matrix_rejects_multiple_prompt_selectors(self):
+        """Matrix CLI should apply the same prompt selector validation."""
+        suite = {
+            "suite_type": "smoke",
+            "prompts": {"short": {"text": "Test prompt", "id": "short_smoke_v1"}},
+        }
+
+        with patch("client.matrix.load_prompt_suite", return_value=suite), patch(
+            "client.matrix.create_matrix_output_directory"
+        ) as create_dir_mock, patch("client.matrix.run_matrix") as run_matrix_mock, patch(
+            "sys.stderr",
+            new_callable=io.StringIO,
+        ), patch(
+            "sys.argv",
+            [
+                "client.matrix",
+                "--node",
+                "yoga",
+                "--backend",
+                "cpu",
+                "--regimes",
+                "warm",
+                "--prompt-tier",
+                "short",
+                "--prompt-id",
+                "short_smoke_v1",
+                "--mock",
+            ],
+        ):
+            with self.assertRaises(SystemExit) as exc:
+                matrix_main()
+
+        self.assertEqual(exc.exception.code, 1)
+        create_dir_mock.assert_not_called()
+        run_matrix_mock.assert_not_called()
 
     def test_run_matrix_requires_valid_regimes(self):
         """Matrix run should reject invalid regime values."""
@@ -555,6 +747,10 @@ class TestMatrixCliValidation(unittest.TestCase):
         self.assertRegex(
             str(requested_output_dir).replace("\\", "/"),
             r"^results/\d{8}_\d{6}_yoga_cpu_matrix$",
+        )
+        self.assertEqual(
+            run_matrix_mock.call_args.kwargs["prompts"],
+            [("Test prompt", "short_smoke_v1")],
         )
 
 

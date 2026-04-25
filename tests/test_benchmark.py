@@ -753,8 +753,7 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
             output_dir = Path(temp_dir)
 
             run_matrix(
-                prompt="Test prompt",
-                prompt_id="short_smoke_v1",
+                prompts=[("Test prompt", "short_smoke_v1")],
                 base_config=base_config,
                 matrix_config=matrix_config,
                 output_dir=output_dir,
@@ -805,8 +804,7 @@ class TestMatrixRunner(unittest.TestCase):
             output_dir = Path(temp_dir)
 
             results = run_matrix(
-                prompt="Test prompt",
-                prompt_id="short_smoke_v1",
+                prompts=[("Test prompt", "short_smoke_v1")],
                 base_config=base_config,
                 matrix_config=matrix_config,
                 output_dir=output_dir,
@@ -840,8 +838,7 @@ class TestMatrixRunner(unittest.TestCase):
             output_dir = Path(temp_dir)
 
             results = run_matrix(
-                prompt="Test prompt",
-                prompt_id="short_smoke_v1",
+                prompts=[("Test prompt", "short_smoke_v1")],
                 base_config=base_config,
                 matrix_config=matrix_config,
                 output_dir=output_dir,
@@ -889,8 +886,7 @@ class TestMatrixRunner(unittest.TestCase):
             output_dir = Path(temp_dir)
 
             results = run_matrix(
-                prompt="Test prompt",
-                prompt_id="short_smoke_v1",
+                prompts=[("Test prompt", "short_smoke_v1")],
                 base_config=base_config,
                 matrix_config=matrix_config,
                 output_dir=output_dir,
@@ -909,6 +905,103 @@ class TestMatrixRunner(unittest.TestCase):
                 jsonl_indices.append(record["repetition_index"])
 
             self.assertEqual(jsonl_indices, [0, 1, 2])
+
+    def test_run_matrix_orders_regime_prompt_repetition(self):
+        """Matrix runner should loop Regime -> Prompt -> Repetition exactly."""
+        base_config = BenchmarkConfig(
+            node="yoga",
+            backend="cpu",
+            run_type="warm",
+            prompt_tier="",
+            mock=False,
+            model_sha256=VALID_MODEL_SHA256,
+            llama_cpp_commit=VALID_LLAMA_CPP_COMMIT,
+        )
+        matrix_config = MatrixConfig(
+            regimes=["cold", "warm"],
+            repetitions=2,
+            prompt_tiers_by_id={
+                "prompt_a": "short",
+                "prompt_b": "medium",
+            },
+            dry_run=True,
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+
+            results = run_matrix(
+                prompts=[
+                    ("Prompt A", "prompt_a"),
+                    ("Prompt B", "prompt_b"),
+                ],
+                base_config=base_config,
+                matrix_config=matrix_config,
+                output_dir=output_dir,
+            )
+
+        self.assertEqual(
+            [
+                (result.regime, result.prompt_id, result.repetition_index)
+                for result in results
+            ],
+            [
+                ("cold", "prompt_a", 0),
+                ("cold", "prompt_a", 1),
+                ("cold", "prompt_b", 0),
+                ("cold", "prompt_b", 1),
+                ("warm", "prompt_a", 0),
+                ("warm", "prompt_a", 1),
+                ("warm", "prompt_b", 0),
+                ("warm", "prompt_b", 1),
+            ],
+        )
+
+    def test_run_matrix_records_per_prompt_tier_metadata(self):
+        """Multi-prompt matrix runs should keep each record's prompt tier explicit."""
+        base_config = BenchmarkConfig(
+            node="yoga",
+            backend="cpu",
+            run_type="warm",
+            prompt_tier="",
+            mock=True,
+        )
+        matrix_config = MatrixConfig(
+            regimes=["warm"],
+            repetitions=1,
+            prompt_tiers_by_id={
+                "prompt_short": "short",
+                "prompt_long": "long",
+            },
+            dry_run=False,
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+
+            run_matrix(
+                prompts=[
+                    ("Short prompt", "prompt_short"),
+                    ("Long prompt", "prompt_long"),
+                ],
+                base_config=base_config,
+                matrix_config=matrix_config,
+                output_dir=output_dir,
+            )
+
+            metrics_file = output_dir / "raw_metrics.jsonl"
+            records = [
+                json.loads(line)
+                for line in metrics_file.read_text(encoding="utf-8").strip().splitlines()
+            ]
+
+        self.assertEqual(
+            [(record["prompt_id"], record["prompt_tier"]) for record in records],
+            [
+                ("prompt_short", "short"),
+                ("prompt_long", "long"),
+            ],
+        )
 
     def test_run_matrix_writes_matrix_metadata(self):
         """Matrix run should write metadata.json with matrix configuration."""
@@ -930,8 +1023,7 @@ class TestMatrixRunner(unittest.TestCase):
             output_dir = Path(temp_dir)
 
             run_matrix(
-                prompt="Test prompt",
-                prompt_id="soak_smoke_v1",
+                prompts=[("Test prompt", "soak_smoke_v1")],
                 base_config=base_config,
                 matrix_config=matrix_config,
                 output_dir=output_dir,
@@ -944,7 +1036,11 @@ class TestMatrixRunner(unittest.TestCase):
             self.assertEqual(metadata["run_type"], "matrix")
             self.assertEqual(metadata["regimes"], ["cold", "warm"])
             self.assertEqual(metadata["repetitions"], 5)
+            self.assertEqual(metadata["prompt_selection_mode"], "prompt_tier")
             self.assertEqual(metadata["prompt_tier"], "soak")
+            self.assertIsNone(metadata["prompt_id"])
+            self.assertFalse(metadata["all_final_prompts"])
+            self.assertEqual(metadata["selected_prompt_ids"], ["soak_smoke_v1"])
             self.assertEqual(metadata["node"], "s25ultra")
             self.assertEqual(metadata["backend"], "opencl")
 
@@ -970,8 +1066,7 @@ class TestMatrixRunner(unittest.TestCase):
             output_dir = Path(temp_dir)
 
             results = run_matrix(
-                prompt="Test prompt",
-                prompt_id="short_smoke_v1",
+                prompts=[("Test prompt", "short_smoke_v1")],
                 base_config=base_config,
                 matrix_config=matrix_config,
                 output_dir=output_dir,
@@ -1019,8 +1114,7 @@ class TestMatrixRunner(unittest.TestCase):
             output_dir = Path(temp_dir)
 
             run_matrix(
-                prompt="Test prompt",
-                prompt_id="short_smoke_v1",
+                prompts=[("Test prompt", "short_smoke_v1")],
                 base_config=base_config,
                 matrix_config=matrix_config,
                 output_dir=output_dir,
@@ -1086,8 +1180,7 @@ class TestMatrixRunner(unittest.TestCase):
 
             with patch("client.benchmark.stream_completion", side_effect=mock_stream):
                 results = run_matrix(
-                    prompt="Test prompt",
-                    prompt_id="short_smoke_v1",
+                    prompts=[("Test prompt", "short_smoke_v1")],
                     base_config=base_config,
                     matrix_config=matrix_config,
                     output_dir=output_dir,
