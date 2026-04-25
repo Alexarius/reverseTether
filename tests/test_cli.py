@@ -546,6 +546,9 @@ class TestRealPromptSuiteIntegrity(unittest.TestCase):
         self.assertEqual(
             dataset_suite["dataset_metadata"],
             {
+                "dataset_name": "synthetic_offline_fixture",
+                "dataset_split": "final",
+                "dataset_source_id": "fixed_offline_baseline",
                 "status": "final",
                 "approval_state": "content approved; ready for final evidence",
                 "fixture_prompt_token_count_method": (
@@ -566,6 +569,9 @@ class TestRealPromptSuiteIntegrity(unittest.TestCase):
         self.assertEqual(
             set(dataset_suite["dataset_metadata"]),
             {
+                "dataset_name",
+                "dataset_split",
+                "dataset_source_id",
                 "status",
                 "approval_state",
                 "fixture_prompt_token_count_method",
@@ -800,6 +806,7 @@ class TestCliValidation(unittest.TestCase):
     def test_main_extracts_prompt_text_and_id_from_fixture_object(self):
         """CLI loop should pass text and id from prompt fixture objects."""
         suite = {
+            "version": "1.2.3",
             "suite_type": "smoke",
             "prompts": {
                 "short": {
@@ -807,6 +814,13 @@ class TestCliValidation(unittest.TestCase):
                     "text": "Test prompt",
                     "id": "short_smoke_v1",
                     "fixture_prompt_token_count": 37,
+                    "dataset_name": "smoke_dataset",
+                    "dataset_split": "dev",
+                    "dataset_source_id": "smoke_001",
+                    "source_article_sha256": "source_sha",
+                    "truncation_rule": "none",
+                    "prompt_fixture_sha256": "fixture_sha",
+                    "tokenizer_runtime_used": "test_tokenizer",
                 }
             },
         }
@@ -850,8 +864,17 @@ class TestCliValidation(unittest.TestCase):
         self.assertEqual(run_mock.call_args.kwargs["prompt_id"], "short_smoke_v1")
         config = run_mock.call_args.kwargs["config"]
         self.assertEqual(config.suite_type, "smoke")
+        self.assertEqual(config.prompt_suite_id, "dataset_suite_v1")
+        self.assertEqual(config.prompt_suite_version, "1.2.3")
         self.assertEqual(config.cache_policy, "disabled")
         self.assertEqual(config.fixture_prompt_token_count, 37)
+        self.assertEqual(config.dataset_name, "smoke_dataset")
+        self.assertEqual(config.dataset_split, "dev")
+        self.assertEqual(config.dataset_source_id, "smoke_001")
+        self.assertEqual(config.source_article_sha256, "source_sha")
+        self.assertEqual(config.truncation_rule, "none")
+        self.assertEqual(config.prompt_fixture_sha256, "fixture_sha")
+        self.assertEqual(config.tokenizer_runtime_used, "test_tokenizer")
 
 
 class TestMatrixCliValidation(unittest.TestCase):

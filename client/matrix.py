@@ -36,6 +36,8 @@ VALID_REGIMES = {"cold", "warm", "soak"}
 def build_config_from_args(
     args: argparse.Namespace,
     suite_type: str = "unknown",
+    prompt_suite_id: str = "",
+    prompt_suite_version: str = "",
 ) -> BenchmarkConfig:
     """Build the base benchmark configuration for a matrix run."""
     return BenchmarkConfig(
@@ -44,6 +46,8 @@ def build_config_from_args(
         run_type="warm",
         prompt_tier=args.prompt_tier or "",
         suite_type=suite_type,
+        prompt_suite_id=prompt_suite_id,
+        prompt_suite_version=prompt_suite_version,
         cache_policy=args.cache_policy,
         host=args.host,
         port=args.port,
@@ -375,9 +379,13 @@ Examples:
         sys.exit(1)
 
     suite_type = suite.get("suite_type", "unknown")
+    prompt_suite_id = args.suite_path.stem
+    prompt_suite_version = suite.get("version", "unknown")
     base_config = build_config_from_args(
         args,
         suite_type=suite_type,
+        prompt_suite_id=prompt_suite_id,
+        prompt_suite_version=prompt_suite_version,
     )
 
     try:

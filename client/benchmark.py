@@ -31,6 +31,7 @@ DEFAULT_TEMPERATURE = 0.0
 DEFAULT_SEED = 42
 DEFAULT_MAX_TOKENS = 512
 DEFAULT_CONTEXT_LENGTH = 2048
+DEFAULT_PROMPT_TOKEN_COUNT_SOURCE = "llama.cpp_server"
 FINAL_DATASET_SUITE_TYPE = "final_dataset"
 MODEL_SHA256_PATTERN = re.compile(r"^[a-f0-9]{64}$")
 LLAMA_CPP_COMMIT_PATTERN = re.compile(r"^[a-f0-9]{40}$")
@@ -75,8 +76,18 @@ class BenchmarkConfig:
 
     # Prompt suite and cache metadata
     suite_type: str = "unknown"
+    prompt_suite_id: str = ""
+    prompt_suite_version: str = ""
     cache_policy: str = "unknown"
     fixture_prompt_token_count: Optional[int] = None
+    prompt_token_count_source: str = ""
+    dataset_name: str = ""
+    dataset_split: str = ""
+    dataset_source_id: str = ""
+    source_article_sha256: str = ""
+    truncation_rule: str = ""
+    prompt_fixture_sha256: str = ""
+    tokenizer_runtime_used: str = ""
 
     # Server endpoint
     host: str = "127.0.0.1"
@@ -457,6 +468,21 @@ def write_metadata_file(config: BenchmarkConfig, output_dir: Path) -> Path:
         "backend": config.backend,
         "run_type": config.run_type,
         "prompt_tier": config.prompt_tier,
+        "suite_type": config.suite_type,
+        "prompt_suite_id": config.prompt_suite_id,
+        "prompt_suite_version": config.prompt_suite_version,
+        "cache_policy": config.cache_policy,
+        "fixture_prompt_token_count": config.fixture_prompt_token_count,
+        "prompt_token_count_source": (
+            config.prompt_token_count_source or DEFAULT_PROMPT_TOKEN_COUNT_SOURCE
+        ),
+        "dataset_name": config.dataset_name,
+        "dataset_split": config.dataset_split,
+        "dataset_source_id": config.dataset_source_id,
+        "source_article_sha256": config.source_article_sha256,
+        "truncation_rule": config.truncation_rule,
+        "prompt_fixture_sha256": config.prompt_fixture_sha256,
+        "tokenizer_runtime_used": config.tokenizer_runtime_used,
         "server_mode": config.server_mode,
         "host": config.host,
         "port": config.port,
@@ -546,6 +572,8 @@ def create_failed_run_record(
         run_id=str(uuid.uuid4()),
         regime=config.run_type,
         suite_type=config.suite_type,
+        prompt_suite_id=config.prompt_suite_id,
+        prompt_suite_version=config.prompt_suite_version,
         cache_policy=config.cache_policy,
         fixture_prompt_token_count=config.fixture_prompt_token_count,
         runtime_prompt_eval_token_count=None,
@@ -576,6 +604,16 @@ def create_failed_run_record(
         prompt_id=prompt_id,
         prompt_tier=config.prompt_tier,
         prompt_token_count=None,
+        prompt_token_count_source=(
+            config.prompt_token_count_source or DEFAULT_PROMPT_TOKEN_COUNT_SOURCE
+        ),
+        dataset_name=config.dataset_name,
+        dataset_split=config.dataset_split,
+        dataset_source_id=config.dataset_source_id,
+        source_article_sha256=config.source_article_sha256,
+        truncation_rule=config.truncation_rule,
+        prompt_fixture_sha256=config.prompt_fixture_sha256,
+        tokenizer_runtime_used=config.tokenizer_runtime_used,
         generated_token_count=0,
         stop_reason="error",
         request_sent_timestamp=timestamp,
@@ -675,6 +713,8 @@ def run_benchmark(
         run_id=str(uuid.uuid4()),
         regime=config.run_type,
         suite_type=config.suite_type,
+        prompt_suite_id=config.prompt_suite_id,
+        prompt_suite_version=config.prompt_suite_version,
         cache_policy=config.cache_policy,
         fixture_prompt_token_count=config.fixture_prompt_token_count,
         runtime_prompt_eval_token_count=runtime_prompt_eval_token_count,
@@ -708,6 +748,16 @@ def run_benchmark(
         prompt_id=prompt_id,
         prompt_tier=config.prompt_tier,
         prompt_token_count=runtime_prompt_eval_token_count,
+        prompt_token_count_source=(
+            config.prompt_token_count_source or DEFAULT_PROMPT_TOKEN_COUNT_SOURCE
+        ),
+        dataset_name=config.dataset_name,
+        dataset_split=config.dataset_split,
+        dataset_source_id=config.dataset_source_id,
+        source_article_sha256=config.source_article_sha256,
+        truncation_rule=config.truncation_rule,
+        prompt_fixture_sha256=config.prompt_fixture_sha256,
+        tokenizer_runtime_used=config.tokenizer_runtime_used,
         generated_token_count=timing.generated_token_count,
         stop_reason=stop_reason,
         # Timing metadata
@@ -823,6 +873,13 @@ def write_matrix_metadata(
         "all_final_prompts": matrix_config.all_final_prompts,
         "selected_prompt_ids": _matrix_selected_prompt_ids(matrix_config, prompts),
         "dry_run": matrix_config.dry_run,
+        "suite_type": base_config.suite_type,
+        "prompt_suite_id": base_config.prompt_suite_id,
+        "prompt_suite_version": base_config.prompt_suite_version,
+        "cache_policy": base_config.cache_policy,
+        "prompt_token_count_source": (
+            base_config.prompt_token_count_source or DEFAULT_PROMPT_TOKEN_COUNT_SOURCE
+        ),
         "node": base_config.node,
         "backend": base_config.backend,
         "server_mode": base_config.server_mode,
@@ -1003,8 +1060,18 @@ def run_matrix(
                     run_type=regime,  # Override with current regime
                     prompt_tier=prompt_tier,
                     suite_type=base_config.suite_type,
+                    prompt_suite_id=base_config.prompt_suite_id,
+                    prompt_suite_version=base_config.prompt_suite_version,
                     cache_policy=base_config.cache_policy,
                     fixture_prompt_token_count=fixture_prompt_token_count,
+                    prompt_token_count_source=base_config.prompt_token_count_source,
+                    dataset_name=prompt_obj.get("dataset_name", ""),
+                    dataset_split=prompt_obj.get("dataset_split", ""),
+                    dataset_source_id=prompt_obj.get("dataset_source_id", ""),
+                    source_article_sha256=prompt_obj.get("source_article_sha256", ""),
+                    truncation_rule=prompt_obj.get("truncation_rule", ""),
+                    prompt_fixture_sha256=prompt_obj.get("prompt_fixture_sha256", ""),
+                    tokenizer_runtime_used=prompt_obj.get("tokenizer_runtime_used", ""),
                     host=base_config.host,
                     port=base_config.port,
                     server_mode=base_config.server_mode,

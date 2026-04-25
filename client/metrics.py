@@ -126,6 +126,9 @@ class RunRecord:
     - llama_cpp_commit: Full 40-character git commit hash
     - seed: Fixed RNG seed (must be 42 for comparable runs)
     - quantization: Must be Q4_0 for core benchmark comparisons
+
+    cache_observed uses string enum values: "full_eval", "collapsed_eval",
+    or "unknown".
     """
 
     # Run identity (required)
@@ -137,11 +140,13 @@ class RunRecord:
 
     # Fields with defaults below
     suite_type: str = "unknown"  # unknown, smoke, final_dataset
+    prompt_suite_id: str = ""
+    prompt_suite_version: str = ""
     cache_policy: str = "unknown"  # unknown, system_managed, cache_mismatch, cleared
     fixture_prompt_token_count: Optional[int] = None
     runtime_prompt_eval_token_count: Optional[int] = None
     cache_expected: bool = False
-    cache_observed: str = "unknown"
+    cache_observed: str = "unknown"  # full_eval, collapsed_eval, unknown
     cache_mismatch: bool = False
     repetition_index: int = 0
     benchmark_condition_id: str = ""  # Unique identifier for the experimental condition
@@ -171,6 +176,14 @@ class RunRecord:
     prompt_id: str = ""
     prompt_tier: str = ""  # short, medium, long, soak
     prompt_token_count: Optional[int] = None
+    prompt_token_count_source: str = ""
+    dataset_name: str = ""
+    dataset_split: str = ""
+    dataset_source_id: str = ""
+    source_article_sha256: str = ""
+    truncation_rule: str = ""
+    prompt_fixture_sha256: str = ""
+    tokenizer_runtime_used: str = ""
     generated_token_count: int = 0
     stop_reason: str = ""
 

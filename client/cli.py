@@ -517,6 +517,8 @@ Mock mode:
         print(f"Error: Prompt selection '{e.args[0]}' not found in suite", file=sys.stderr)
         sys.exit(1)
     suite_type = suite.get("suite_type", "unknown")
+    prompt_suite_id = args.suite_path.stem
+    prompt_suite_version = suite.get("version", "unknown")
     prompt_tiers_by_id = get_prompt_tier_by_id(suite)
 
     # Build configuration
@@ -526,6 +528,8 @@ Mock mode:
         run_type=args.run_type,
         prompt_tier=args.prompt_tier or "",
         suite_type=suite_type,
+        prompt_suite_id=prompt_suite_id,
+        prompt_suite_version=prompt_suite_version,
         cache_policy=args.cache_policy,
         host=args.host,
         port=args.port,
@@ -592,6 +596,13 @@ Mock mode:
             config,
             prompt_tier=prompt_tiers_by_id[prompt_id],
             fixture_prompt_token_count=prompt_obj.get("fixture_prompt_token_count"),
+            dataset_name=prompt_obj.get("dataset_name", ""),
+            dataset_split=prompt_obj.get("dataset_split", ""),
+            dataset_source_id=prompt_obj.get("dataset_source_id", ""),
+            source_article_sha256=prompt_obj.get("source_article_sha256", ""),
+            truncation_rule=prompt_obj.get("truncation_rule", ""),
+            prompt_fixture_sha256=prompt_obj.get("prompt_fixture_sha256", ""),
+            tokenizer_runtime_used=prompt_obj.get("tokenizer_runtime_used", ""),
         )
         if len(prompts) > 1:
             print(f"Prompt {prompt_id}...")
