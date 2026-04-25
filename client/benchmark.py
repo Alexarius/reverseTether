@@ -44,6 +44,11 @@ class BenchmarkConfig:
     run_type: str  # cold, warm, soak
     prompt_tier: str  # short, medium, long, soak
 
+    # Prompt suite and cache metadata
+    suite_type: str = ""
+    cache_policy: str = "unknown"
+    fixture_prompt_token_count: Optional[int] = None
+
     # Server endpoint
     host: str = "127.0.0.1"
     port: int = 8080
@@ -436,6 +441,9 @@ def create_failed_run_record(
         timestamp=timestamp,
         run_id=str(uuid.uuid4()),
         regime=config.run_type,
+        suite_type=config.suite_type,
+        cache_policy=config.cache_policy,
+        fixture_prompt_token_count=config.fixture_prompt_token_count,
         repetition_index=repetition_index,
         benchmark_condition_id=benchmark_condition_id,
         node=config.node,
@@ -535,6 +543,9 @@ def run_benchmark(
         timestamp=request_sent_wallclock.isoformat(),
         run_id=str(uuid.uuid4()),
         regime=config.run_type,
+        suite_type=config.suite_type,
+        cache_policy=config.cache_policy,
+        fixture_prompt_token_count=config.fixture_prompt_token_count,
         repetition_index=repetition_index,
         benchmark_condition_id=benchmark_condition_id,
         node=config.node,
@@ -788,6 +799,9 @@ def run_matrix(
                     backend=base_config.backend,
                     run_type=regime,  # Override with current regime
                     prompt_tier=prompt_tier,
+                    suite_type=base_config.suite_type,
+                    cache_policy=base_config.cache_policy,
+                    fixture_prompt_token_count=base_config.fixture_prompt_token_count,
                     host=base_config.host,
                     port=base_config.port,
                     server_mode=base_config.server_mode,

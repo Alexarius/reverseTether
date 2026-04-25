@@ -55,6 +55,8 @@ These fields are required for valid benchmark comparisons per DECISION_LOG.md DL
 | `node` | string | Node identifier: `yoga` or `s25ultra` |
 | `backend` | string | Backend: `cpu`, `opencl`, `npu_experimental` |
 | `server_mode` | string | Server location: `local` or `phone` |
+| `suite_type` | string | Prompt suite category, e.g., `smoke` or `final_dataset`; defaults to empty for older/manual records |
+| `cache_policy` | string | Cache handling policy for the run; defaults to `unknown`, with `system_managed`, `cache_mismatch`, and `cleared` reserved for later cache-control slices |
 
 ### Device/Runtime Metadata
 
@@ -88,6 +90,7 @@ These fields are required for valid benchmark comparisons per DECISION_LOG.md DL
 |-------|------|-------------|
 | `prompt_id` | string | Versioned identifier for the prompt (e.g., `short_smoke_v1`) |
 | `prompt_tier` | string | `short`, `medium`, `long`, or `soak` |
+| `fixture_prompt_token_count` | integer \| null | Static prompt-suite metadata for the fixture prompt token count. This is separate from dynamic `prompt_token_count` and must not replace the runtime-reported count. |
 | `prompt_token_count` | integer \| null | Prompt tokens from server's `tokens_evaluated` |
 | `generated_token_count` | integer | Number of tokens generated |
 | `stop_reason` | string | Why generation stopped |
@@ -109,6 +112,9 @@ The smoke prompt suite uses a versioned ID format: `<tier>_smoke_v<N>` (e.g., `s
 #### Token Count Integrity (Issue 09)
 
 **Critical**: `prompt_token_count` must be recorded from the llama.cpp server response, never guessed.
+`fixture_prompt_token_count` is static suite metadata only; it can help audit the
+selected fixture, but it is not a measurement and must not be used for dynamic
+runtime token accounting.
 
 The client captures this from the `tokens_evaluated` field in the server's final SSE event:
 
@@ -170,6 +176,8 @@ absent or `null`. Missing thermal data must not be replaced with guessed values.
   "node": "yoga",
   "backend": "cpu",
   "server_mode": "local",
+  "suite_type": "smoke",
+  "cache_policy": "unknown",
   "laptop_identifier": "yoga_slim7_14are05",
   "phone_identifier": "",
   "os_build_metadata": "Windows 11 Education 10.0.26200",
@@ -188,6 +196,7 @@ absent or `null`. Missing thermal data must not be replaced with guessed values.
   "stop_config": "eos_or_max_tokens",
   "prompt_id": "short_smoke_v1",
   "prompt_tier": "short",
+  "fixture_prompt_token_count": null,
   "prompt_token_count": 45,
   "generated_token_count": 87,
   "stop_reason": "eos",
@@ -296,3 +305,4 @@ pytest tests/test_cli.py -k "prompt" -v
 |---------|------|---------|
 | 1.0.0 | 2026-03-25 | Initial schema with mandatory reproducibility fields |
 | 1.1.0 | 2026-04-20 | Documented optional pre/post thermal, battery, and anomaly context fields for Issue 11 |
+| 1.2.0 | 2026-04-25 | Added prompt suite type, cache policy, and static fixture prompt token count metadata |

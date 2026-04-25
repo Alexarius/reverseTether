@@ -45,6 +45,9 @@ class TestBenchmarkLogging(unittest.TestCase):
             backend="cpu",
             run_type="warm",
             prompt_tier="short",
+            suite_type="smoke",
+            cache_policy="system_managed",
+            fixture_prompt_token_count=45,
             model_name="Llama-3.2-1B-Instruct",
             model_sha256=VALID_MODEL_SHA256,
             llama_cpp_commit=VALID_LLAMA_CPP_COMMIT,
@@ -117,6 +120,12 @@ class TestBenchmarkLogging(unittest.TestCase):
             self.assertEqual(raw_record["final_token_timestamp"], final_token_wallclock.isoformat())
             self.assertEqual(record.client_overhead_ms, 12.5)
             self.assertEqual(raw_record["client_overhead_ms"], 12.5)
+            self.assertEqual(record.suite_type, "smoke")
+            self.assertEqual(record.cache_policy, "system_managed")
+            self.assertEqual(record.fixture_prompt_token_count, 45)
+            self.assertEqual(raw_record["suite_type"], "smoke")
+            self.assertEqual(raw_record["cache_policy"], "system_managed")
+            self.assertEqual(raw_record["fixture_prompt_token_count"], 45)
             self.assertEqual(raw_record["start_temperature_c"], 32.5)
             self.assertEqual(raw_record["end_temperature_c"], 34.0)
             self.assertEqual(raw_record["temperature_source"], "sysfs_power_supply_battery_temp")
@@ -740,6 +749,9 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
             backend="cpu",
             run_type="warm",
             prompt_tier="short",
+            suite_type="smoke",
+            cache_policy="cache_mismatch",
+            fixture_prompt_token_count=37,
             mock=True,
         )
         matrix_config = MatrixConfig(
@@ -770,8 +782,14 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
                 self.assertIn("prompt_id", record)
                 self.assertIn("prompt_token_count", record)
                 self.assertIn("prompt_tier", record)
+                self.assertIn("suite_type", record)
+                self.assertIn("cache_policy", record)
+                self.assertIn("fixture_prompt_token_count", record)
                 # prompt_id should match what was passed
                 self.assertEqual(record["prompt_id"], "short_smoke_v1")
+                self.assertEqual(record["suite_type"], "smoke")
+                self.assertEqual(record["cache_policy"], "cache_mismatch")
+                self.assertEqual(record["fixture_prompt_token_count"], 37)
 
 
 class TestMatrixRunner(unittest.TestCase):
@@ -1139,6 +1157,9 @@ class TestMatrixRunner(unittest.TestCase):
             backend="cpu",
             run_type="warm",
             prompt_tier="short",
+            suite_type="smoke",
+            cache_policy="system_managed",
+            fixture_prompt_token_count=37,
             model_sha256=VALID_MODEL_SHA256,
             llama_cpp_commit=VALID_LLAMA_CPP_COMMIT,
             mock=False,
@@ -1218,6 +1239,9 @@ class TestMatrixRunner(unittest.TestCase):
         self.assertEqual(failed_record["generated_token_count"], 0)
         self.assertEqual(failed_record["stop_reason"], "error")
         self.assertEqual(failed_record["notes"], "Simulated network failure")
+        self.assertEqual(failed_record["suite_type"], "smoke")
+        self.assertEqual(failed_record["cache_policy"], "system_managed")
+        self.assertEqual(failed_record["fixture_prompt_token_count"], 37)
         self.assertEqual(failed_record["start_temperature_c"], 35.0)
         self.assertEqual(failed_record["end_temperature_c"], 36.5)
         self.assertEqual(failed_record["temperature_source"], "dumpsys_battery_temperature")

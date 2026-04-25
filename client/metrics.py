@@ -136,6 +136,9 @@ class RunRecord:
     backend: str  # cpu, opencl, npu_experimental
 
     # Fields with defaults below
+    suite_type: str = ""  # smoke, final_dataset
+    cache_policy: str = "unknown"  # unknown, system_managed, cache_mismatch, cleared
+    fixture_prompt_token_count: Optional[int] = None
     repetition_index: int = 0
     benchmark_condition_id: str = ""  # Unique identifier for the experimental condition
     server_mode: str = "local"  # local, phone
