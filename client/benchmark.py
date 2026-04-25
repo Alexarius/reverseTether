@@ -48,6 +48,22 @@ CACHE_POLLUTION_POLICIES = {
 }
 
 
+class CacheGateError(RuntimeError):
+    """Raised when final-dataset cache evidence fails the acceptance gate."""
+
+    def __init__(
+        self,
+        message: str,
+        cache_expected: bool,
+        cache_observed: str,
+        cache_mismatch: bool,
+    ) -> None:
+        super().__init__(message)
+        self.cache_expected = cache_expected
+        self.cache_observed = cache_observed
+        self.cache_mismatch = cache_mismatch
+
+
 @dataclass
 class BenchmarkConfig:
     """Configuration for a benchmark run."""
@@ -299,13 +315,19 @@ def enforce_final_dataset_cache_gate(
     if not cache_expected and not cache_mismatch:
         return
 
-    raise RuntimeError(
+    message = (
         "Final dataset cache gate failed: "
         f"cache_policy={config.cache_policy!r}, "
         f"cache_expected={cache_expected}, "
         f"cache_observed={cache_observed!r}, "
         f"cache_mismatch={cache_mismatch}. "
         "Final evidence requires full prompt evaluation with no cache reuse."
+    )
+    raise CacheGateError(
+        message=message,
+        cache_expected=cache_expected,
+        cache_observed=cache_observed,
+        cache_mismatch=cache_mismatch,
     )
 
 
@@ -500,6 +522,9 @@ def create_failed_run_record(
     config: BenchmarkConfig,
     repetition_index: int,
     error_message: str,
+    cache_expected_override: Optional[bool] = None,
+    cache_observed_override: Optional[str] = None,
+    cache_mismatch_override: Optional[bool] = None,
 ) -> RunRecord:
     """Create a durable error record for a failed matrix repetition."""
     timestamp = datetime.now().isoformat()
@@ -509,6 +534,12 @@ def create_failed_run_record(
         fixture_prompt_token_count=config.fixture_prompt_token_count,
         runtime_prompt_eval_token_count=None,
     )
+    if cache_expected_override is not None:
+        cache_expected = cache_expected_override
+    if cache_observed_override is not None:
+        cache_observed = cache_observed_override
+    if cache_mismatch_override is not None:
+        cache_mismatch = cache_mismatch_override
 
     return RunRecord(
         timestamp=timestamp,
@@ -1030,11 +1061,19 @@ def run_matrix(
                         # CRITICAL: Do not silently skip - capture the error for audit
                         result.success = False
                         result.error_message = str(e)
+                        failed_record_kwargs = {}
+                        if isinstance(e, CacheGateError):
+                            failed_record_kwargs = {
+                                "cache_expected_override": e.cache_expected,
+                                "cache_observed_override": e.cache_observed,
+                                "cache_mismatch_override": e.cache_mismatch,
+                            }
                         result.record = create_failed_run_record(
                             prompt_id=prompt_id,
                             config=run_config,
                             repetition_index=rep_idx,
                             error_message=result.error_message,
+                            **failed_record_kwargs,
                         )
                         write_run_record(result.record, actual_output_dir)
 

@@ -1551,6 +1551,83 @@ class TestMatrixRunner(unittest.TestCase):
         self.assertEqual(failed_record["start_battery_level_percent"], 76)
         self.assertEqual(failed_record["end_battery_level_percent"], 75)
 
+    def test_run_matrix_cache_gate_failure_preserves_mismatch_metadata(self):
+        """Final-dataset cache-gate failures must remain excluded from final evidence."""
+        base_config = BenchmarkConfig(
+            node="yoga",
+            backend="cpu",
+            run_type="warm",
+            prompt_tier="short",
+            suite_type="final_dataset",
+            cache_policy="disabled",
+            model_sha256=VALID_MODEL_SHA256,
+            llama_cpp_commit=VALID_LLAMA_CPP_COMMIT,
+            mock=False,
+        )
+        matrix_config = MatrixConfig(
+            regimes=["warm"],
+            repetitions=1,
+            prompt_tier="short",
+            prompt_tiers_by_id={"final_short_01": "short"},
+            dry_run=False,
+        )
+        timing = TimingData(
+            request_sent_ts=10.0,
+            first_token_ts=11.0,
+            final_token_ts=13.0,
+            generated_token_count=5,
+            client_overhead_ms=2.0,
+            request_sent_wallclock=datetime(2026, 3, 25, 12, 0, 0),
+            first_token_wallclock=datetime(2026, 3, 25, 12, 0, 1),
+            final_token_wallclock=datetime(2026, 3, 25, 12, 0, 3),
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+
+            with patch(
+                "client.benchmark.stream_completion",
+                return_value=(
+                    timing,
+                    [{"stop": True, "tokens_evaluated": 1}],
+                    "eos",
+                ),
+            ):
+                results = run_matrix(
+                    prompts=[
+                        {
+                            "text": "Test prompt",
+                            "id": "final_short_01",
+                            "fixture_prompt_token_count": 100,
+                        }
+                    ],
+                    base_config=base_config,
+                    matrix_config=matrix_config,
+                    output_dir=output_dir,
+                )
+
+            records = [
+                json.loads(line)
+                for line in (output_dir / "raw_metrics.jsonl")
+                .read_text(encoding="utf-8")
+                .strip()
+                .splitlines()
+            ]
+
+        self.assertEqual(len(results), 1)
+        self.assertFalse(results[0].success)
+        self.assertIn("Final dataset cache gate failed", results[0].error_message)
+        self.assertEqual(results[0].record.stop_reason, "error")
+        self.assertFalse(results[0].record.cache_expected)
+        self.assertEqual(results[0].record.cache_observed, "collapsed_eval")
+        self.assertTrue(results[0].record.cache_mismatch)
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["stop_reason"], "error")
+        self.assertFalse(records[0]["cache_expected"])
+        self.assertEqual(records[0]["cache_observed"], "collapsed_eval")
+        self.assertTrue(records[0]["cache_mismatch"])
+
 
 if __name__ == "__main__":
     unittest.main()
