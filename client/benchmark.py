@@ -202,6 +202,8 @@ def generate_mock_timing(
         final_token_wallclock=final_token_wallclock,
     )
 
+    # Deterministically mirroring the fixture count keeps CI mock runs inside
+    # the strict +/-2 token synthetic cache gate.
     mock_prompt_token_count = (
         fixture_prompt_token_count
         if fixture_prompt_token_count is not None
@@ -306,8 +308,8 @@ def evaluate_cache_policy(
             fixture_prompt_token_count is not None
             and fixture_prompt_token_count > 0
         ):
-            collapsed_eval = collapsed_eval or runtime_prompt_eval_token_count < (
-                fixture_prompt_token_count - 2
+            collapsed_eval = collapsed_eval or (
+                abs(runtime_prompt_eval_token_count - fixture_prompt_token_count) > 2
             )
         cache_observed = "collapsed_eval" if collapsed_eval else "full_eval"
     elif policy_reports_pollution:

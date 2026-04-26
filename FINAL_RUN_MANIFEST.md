@@ -103,7 +103,7 @@ Approved final cache policies are:
 Final records must set:
 
 - `cache_expected`: `false`
-- `cache_observed`: `false`
+- `cache_observed`: `"full_eval"`
 - `cache_mismatch`: `false`
 
 For synthetic final prompts, `runtime_prompt_eval_token_count` must match the full fixture prompt evaluation. If the runtime reports a much smaller value, such as `1` after a repeated prompt, treat that as observed cache reuse and reject the record from final evidence.

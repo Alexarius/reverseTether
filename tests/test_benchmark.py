@@ -579,6 +579,30 @@ class TestCachePolicyEvaluation(unittest.TestCase):
         self.assertEqual(record.cache_observed, "collapsed_eval")
         self.assertTrue(record.cache_mismatch)
 
+    def test_more_than_two_tokens_above_fixture_sets_mismatch(self):
+        """A runtime prompt eval count more than two above fixture is collapsed."""
+        record, _ = self._run_with_runtime_prompt_count(
+            cache_policy="disabled",
+            fixture_prompt_token_count=200,
+            runtime_prompt_eval_token_count=203,
+        )
+
+        self.assertEqual(record.cache_observed, "collapsed_eval")
+        self.assertTrue(record.cache_mismatch)
+
+    def test_runtime_prompt_counts_within_two_tokens_of_fixture_pass(self):
+        """Runtime prompt eval counts within +/-2 fixture tokens are accepted."""
+        for runtime_prompt_eval_token_count in (198, 199, 200, 201, 202):
+            with self.subTest(runtime_prompt_eval_token_count=runtime_prompt_eval_token_count):
+                record, _ = self._run_with_runtime_prompt_count(
+                    cache_policy="disabled",
+                    fixture_prompt_token_count=200,
+                    runtime_prompt_eval_token_count=runtime_prompt_eval_token_count,
+                )
+
+                self.assertEqual(record.cache_observed, "full_eval")
+                self.assertFalse(record.cache_mismatch)
+
     def test_warm_cache_policy_allows_collapsed_prompt_eval(self):
         """Explicit warm-cache policy should not mark expected reuse as mismatch."""
         record, _ = self._run_with_runtime_prompt_count(
