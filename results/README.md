@@ -28,6 +28,7 @@ This directory now contains development and historical benchmark outputs. They a
 - Smoke-suite records, including `_smoke_v1` prompt IDs, are development validation only.
 - Final aggregation filters development results out by default.
 - Final claims must use records marked with `prompt_suite_type=synthetic` and `cache_mismatch=false`.
+- Mock outputs are development validation only. Store them under `scratch_mock/` or delete them after validation. They must not remain under top-level `results/` or `final_input/` for final submission.
 
 ## Development-Only Historical Results
 

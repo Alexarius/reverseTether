@@ -63,6 +63,7 @@ These fields are required for valid benchmark comparisons per DECISION_LOG.md DL
 | `cache_expected` | boolean | Whether prompt/KV cache reuse was expected for this measured request; must be `false` for final evidence |
 | `cache_observed` | string | Runtime prompt evaluation evidence: `full_eval`, `collapsed_eval`, or `unknown` |
 | `cache_mismatch` | boolean | Whether expected and observed cache behavior disagree; must be `false` for final evidence |
+| `mock_mode` | boolean | `true` for mock/development timing generated without a real llama.cpp server. Strict final aggregation excludes `mock_mode=true` records by default. |
 
 ### Device/Runtime Metadata
 
