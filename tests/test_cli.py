@@ -3,6 +3,7 @@
 import io
 import hashlib
 import json
+import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -24,7 +25,7 @@ from client.matrix import main as matrix_main
 FINAL_DATASET_FIXTURE_METADATA_FIELDS = {
     "dataset_name",
     "dataset_split",
-    "dataset_source_id",
+    "source_article_id",
     "truncation_rule",
     "prompt_fixture_sha256",
     "tokenizer_runtime_used",
@@ -111,7 +112,7 @@ class TestPromptSuiteValidation(unittest.TestCase):
                     "fixture_prompt_token_count": VALID_FINAL_DATASET_TOKEN_COUNTS[tier],
                     "dataset_name": "synthetic_offline_fixture",
                     "dataset_split": "placeholder_validation",
-                    "dataset_source_id": f"placeholder_{prompt_key}",
+                    "source_article_id": f"placeholder_{prompt_key}",
                     "truncation_rule": f"placeholder_fixed_{tier}_bucket_v1",
                     "prompt_fixture_sha256": hashlib.sha256(
                         prompt_text.encode("utf-8")
@@ -550,7 +551,7 @@ class TestRealPromptSuiteIntegrity(unittest.TestCase):
             {
                 "dataset_name": "synthetic_offline_fixture",
                 "dataset_split": "final",
-                "dataset_source_id": "fixed_offline_baseline",
+                "source_article_id": "fixed_offline_baseline",
                 "status": "final",
                 "approval_state": "content approved; ready for final evidence",
                 "fixture_prompt_token_count_method": (
@@ -573,7 +574,7 @@ class TestRealPromptSuiteIntegrity(unittest.TestCase):
             {
                 "dataset_name",
                 "dataset_split",
-                "dataset_source_id",
+                "source_article_id",
                 "status",
                 "approval_state",
                 "fixture_prompt_token_count_method",
@@ -820,7 +821,7 @@ class TestCliValidation(unittest.TestCase):
                     "fixture_prompt_token_count": 37,
                     "dataset_name": "smoke_dataset",
                     "dataset_split": "dev",
-                    "dataset_source_id": "smoke_001",
+                    "source_article_id": "smoke_001",
                     "truncation_rule": "none",
                     "prompt_fixture_sha256": "ignored_config_hash",
                     "tokenizer_runtime_used": "test_tokenizer",
@@ -873,7 +874,7 @@ class TestCliValidation(unittest.TestCase):
         self.assertEqual(config.fixture_prompt_token_count, 37)
         self.assertEqual(config.dataset_name, "smoke_dataset")
         self.assertEqual(config.dataset_split, "dev")
-        self.assertEqual(config.dataset_source_id, "smoke_001")
+        self.assertEqual(config.source_article_id, "smoke_001")
         self.assertEqual(config.truncation_rule, "none")
         self.assertEqual(config.prompt_fixture_sha256, expected_hash)
         self.assertEqual(config.tokenizer_runtime_used, "test_tokenizer")
@@ -881,6 +882,41 @@ class TestCliValidation(unittest.TestCase):
 
 class TestMatrixCliValidation(unittest.TestCase):
     """Tests for matrix run CLI validation."""
+
+    def test_cli_matrix_node_shorthand_routes_to_matrix_runner(self):
+        """client.cli should support the compact matrix-node validation command."""
+        with patch("client.matrix.main") as matrix_main_mock, patch(
+            "sys.argv",
+            [
+                "client.cli",
+                "matrix-node",
+                "yoga-backend",
+                "cpu-regimes",
+                "warm",
+                "--repetitions",
+                "1",
+                "--all-final-prompts",
+                "--mock",
+            ],
+        ):
+            cli_main()
+            matrix_main_mock.assert_called_once()
+            self.assertEqual(
+                sys.argv,
+                [
+                    "client.cli",
+                    "--node",
+                    "yoga",
+                    "--backend",
+                    "cpu",
+                    "--regimes",
+                    "warm",
+                    "--repetitions",
+                    "1",
+                    "--all-final-prompts",
+                    "--mock",
+                ],
+            )
 
     def test_run_matrix_rejects_multiple_prompt_selectors(self):
         """Matrix CLI should apply the same prompt selector validation."""

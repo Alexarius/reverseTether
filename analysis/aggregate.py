@@ -85,11 +85,20 @@ def collect_runs(input_dir: Path) -> pd.DataFrame:
     all_records = []
     excluded_dirs = []
 
-    for subdir in sorted(input_dir.iterdir()):
-        if not subdir.is_dir():
-            continue
-        if subdir.name.startswith("."):
-            continue
+    is_single_run_dir = (
+        (input_dir / "raw_metrics.jsonl").exists()
+        and (input_dir / "metadata.json").exists()
+    )
+    if is_single_run_dir:
+        candidate_run_dirs = [input_dir]
+    else:
+        candidate_run_dirs = [
+            subdir
+            for subdir in sorted(input_dir.iterdir())
+            if subdir.is_dir() and not subdir.name.startswith(".")
+        ]
+
+    for subdir in candidate_run_dirs:
 
         # Parse directory name
         dir_meta = parse_run_directory_name(subdir.name)
@@ -204,6 +213,11 @@ def apply_final_evidence_filter(df: pd.DataFrame) -> pd.DataFrame:
         if "cache_observed" in df.columns
         else pd.Series(pd.NA, index=df.index)
     )
+    source_article_id = (
+        df["source_article_id"]
+        if "source_article_id" in df.columns
+        else pd.Series(pd.NA, index=df.index)
+    )
     stop_reason = (
         df["stop_reason"]
         if "stop_reason" in df.columns
@@ -218,9 +232,13 @@ def apply_final_evidence_filter(df: pd.DataFrame) -> pd.DataFrame:
     suite_text = suite_type.astype("string").str.strip()
     cache_text = cache_policy.astype("string").str.strip()
     observed_text = cache_observed.astype("string").str.strip()
+    source_article_text = source_article_id.astype("string").str.strip()
     stop_text = stop_reason.astype("string").str.strip()
     suite_present = suite_text.notna() & suite_text.ne("").fillna(False)
     cache_present = cache_text.notna() & cache_text.ne("").fillna(False)
+    source_article_present = (
+        source_article_text.notna() & source_article_text.ne("").fillna(False)
+    )
     cache_expected = _field_true_mask(df, "cache_expected")
     cache_mismatch = _field_true_mask(df, "cache_mismatch")
     is_failure = stop_text.eq("error").fillna(False) | ttft_ms.eq(0.0).fillna(False)
@@ -233,6 +251,7 @@ def apply_final_evidence_filter(df: pd.DataFrame) -> pd.DataFrame:
         & ~cache_expected
         & ~cache_mismatch
         & cache_verified
+        & source_article_present
     )
 
     filtered = df.loc[keep_mask].copy()
@@ -483,6 +502,7 @@ def main() -> int:
         epilog="""
 Example:
   python analysis/aggregate.py --input results/ --output results/summaries/
+  python analysis/aggregate.py results/20260425_120000_yoga_cpu_matrix
 
 Manual Cross-Check:
   After running, verify derived metrics by manually inspecting a subset of
@@ -490,16 +510,25 @@ Manual Cross-Check:
 """,
     )
     parser.add_argument(
+        "input_path",
+        nargs="?",
+        type=Path,
+        help="Optional shorthand input path containing run folders or one run folder.",
+    )
+    parser.add_argument(
         "--input",
         type=Path,
-        required=True,
+        default=None,
         help="Input directory containing run folders (e.g., results/)",
     )
     parser.add_argument(
         "--output",
         type=Path,
-        required=True,
-        help="Output directory for summaries (e.g., results/summaries/)",
+        default=None,
+        help=(
+            "Output directory for summaries (e.g., results/summaries/). "
+            "Defaults to <input>/summaries."
+        ),
     )
     parser.add_argument(
         "--group-by-prompt-id",
@@ -513,8 +542,18 @@ Manual Cross-Check:
     )
     args = parser.parse_args()
 
-    input_dir = args.input.resolve()
-    output_dir = args.output.resolve()
+    input_arg = args.input or args.input_path
+    if input_arg is None:
+        parser.error(
+            "an input directory is required via --input or positional input_path"
+        )
+
+    input_dir = input_arg.resolve()
+    output_dir = (
+        args.output.resolve()
+        if args.output is not None
+        else (input_dir / "summaries").resolve()
+    )
 
     if not input_dir.exists():
         logger.error("Input directory does not exist: %s", input_dir)

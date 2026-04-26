@@ -140,6 +140,7 @@ class RunRecord:
 
     # Fields with defaults below
     suite_type: str = "unknown"  # unknown, smoke, synthetic
+    prompt_suite_type: str = ""
     prompt_suite_id: str = ""
     prompt_suite_version: str = ""
     cache_policy: str = "unknown"  # unknown, system_managed, cache_mismatch, cleared
@@ -179,7 +180,7 @@ class RunRecord:
     prompt_token_count_source: str = ""
     dataset_name: str = ""
     dataset_split: str = ""
-    dataset_source_id: str = ""
+    source_article_id: str = ""
     truncation_rule: str = ""
     prompt_fixture_sha256: str = ""
     tokenizer_runtime_used: str = ""

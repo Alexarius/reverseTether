@@ -84,7 +84,7 @@ class BenchmarkConfig:
     prompt_token_count_source: str = ""
     dataset_name: str = ""
     dataset_split: str = ""
-    dataset_source_id: str = ""
+    source_article_id: str = ""
     truncation_rule: str = ""
     prompt_fixture_sha256: str = ""
     tokenizer_runtime_used: str = ""
@@ -303,21 +303,27 @@ def evaluate_cache_policy(
     policy_reports_pollution = normalized_policy in CACHE_POLLUTION_POLICIES
 
     if runtime_prompt_eval_token_count is not None:
-        collapsed_eval = runtime_prompt_eval_token_count == 1
-        if (
+        runtime_count = runtime_prompt_eval_token_count
+        near_cache_hit = runtime_count in (0, 1)
+        fixture_count_available = (
             fixture_prompt_token_count is not None
             and fixture_prompt_token_count > 0
-        ):
-            collapsed_eval = collapsed_eval or (
-                abs(runtime_prompt_eval_token_count - fixture_prompt_token_count) > 2
-            )
-        cache_observed = "collapsed_eval" if collapsed_eval else "full_eval"
+        )
+
+        if cache_expected:
+            cache_observed = "collapsed_eval" if near_cache_hit else "full_eval"
+        elif fixture_count_available:
+            fixture_delta = abs(runtime_count - fixture_prompt_token_count)
+            cache_observed = "full_eval" if fixture_delta <= 2 else "collapsed_eval"
+        else:
+            cache_observed = "collapsed_eval" if near_cache_hit else "full_eval"
     elif policy_reports_pollution:
         cache_observed = "collapsed_eval"
 
     cache_mismatch = (
         policy_reports_pollution
         or (not cache_expected and cache_observed == "collapsed_eval")
+        or (cache_expected and cache_observed == "full_eval")
     )
     return cache_expected, cache_observed, cache_mismatch
 
@@ -488,7 +494,7 @@ def write_metadata_file(config: BenchmarkConfig, output_dir: Path) -> Path:
         ),
         "dataset_name": config.dataset_name,
         "dataset_split": config.dataset_split,
-        "dataset_source_id": config.dataset_source_id,
+        "source_article_id": config.source_article_id,
         "truncation_rule": config.truncation_rule,
         "prompt_fixture_sha256": config.prompt_fixture_sha256,
         "tokenizer_runtime_used": config.tokenizer_runtime_used,
@@ -545,12 +551,8 @@ def write_run_record(record: RunRecord, output_dir: Path) -> Path:
     """
     metrics_file = output_dir / "raw_metrics.jsonl"
     record_dict = asdict(record)
-    record_dict_with_alias = {}
-    for key, value in record_dict.items():
-        record_dict_with_alias[key] = value
-        if key == "suite_type":
-            record_dict_with_alias["prompt_suite_type"] = value
-    record_dict = record_dict_with_alias
+    if not record_dict.get("prompt_suite_type"):
+        record_dict["prompt_suite_type"] = record_dict.get("suite_type", "")
 
     with open(metrics_file, "a", encoding="utf-8") as f:
         f.write(json.dumps(record_dict) + "\n")
@@ -587,6 +589,7 @@ def create_failed_run_record(
         run_id=str(uuid.uuid4()),
         regime=config.run_type,
         suite_type=config.suite_type,
+        prompt_suite_type=config.suite_type,
         prompt_suite_id=config.prompt_suite_id,
         prompt_suite_version=config.prompt_suite_version,
         cache_policy=config.cache_policy,
@@ -624,7 +627,7 @@ def create_failed_run_record(
         ),
         dataset_name=config.dataset_name,
         dataset_split=config.dataset_split,
-        dataset_source_id=config.dataset_source_id,
+        source_article_id=config.source_article_id,
         truncation_rule=config.truncation_rule,
         prompt_fixture_sha256=config.prompt_fixture_sha256,
         tokenizer_runtime_used=config.tokenizer_runtime_used,
@@ -732,6 +735,7 @@ def run_benchmark(
         run_id=str(uuid.uuid4()),
         regime=config.run_type,
         suite_type=config.suite_type,
+        prompt_suite_type=config.suite_type,
         prompt_suite_id=config.prompt_suite_id,
         prompt_suite_version=config.prompt_suite_version,
         cache_policy=config.cache_policy,
@@ -772,7 +776,7 @@ def run_benchmark(
         ),
         dataset_name=config.dataset_name,
         dataset_split=config.dataset_split,
-        dataset_source_id=config.dataset_source_id,
+        source_article_id=config.source_article_id,
         truncation_rule=config.truncation_rule,
         prompt_fixture_sha256=config.prompt_fixture_sha256,
         tokenizer_runtime_used=config.tokenizer_runtime_used,
@@ -1087,7 +1091,7 @@ def run_matrix(
                     prompt_token_count_source=base_config.prompt_token_count_source,
                     dataset_name=prompt_obj.get("dataset_name", ""),
                     dataset_split=prompt_obj.get("dataset_split", ""),
-                    dataset_source_id=prompt_obj.get("dataset_source_id", ""),
+                    source_article_id=prompt_obj.get("source_article_id", ""),
                     truncation_rule=prompt_obj.get("truncation_rule", ""),
                     prompt_fixture_sha256=actual_hash,
                     tokenizer_runtime_used=prompt_obj.get("tokenizer_runtime_used", ""),

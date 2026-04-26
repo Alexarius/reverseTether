@@ -111,7 +111,7 @@ These fields are mandatory for final dataset records and optional for smoke/deve
 |-------|------|-------------|
 | `dataset_name` | string | Dataset family used for the fixture, e.g., `synthetic_offline_fixture` |
 | `dataset_split` | string | Dataset split or fixed offline partition, e.g., `validation` |
-| `dataset_source_id` | string | Stable source record ID or offline fixture source ID |
+| `source_article_id` | string | Stable source record ID or offline fixture source ID |
 | `truncation_rule` | string | Rule used to shape the source text into the fixture prompt |
 | `prompt_fixture_sha256` | string | SHA-256 hash of the final prompt fixture text |
 | `tokenizer_runtime_used` | string | Tokenizer/runtime used to produce `fixture_prompt_token_count` |
@@ -249,7 +249,7 @@ absent or `null`. Missing thermal data must not be replaced with guessed values.
   "prompt_token_count_source": "llama_cpp_tokens_evaluated",
   "dataset_name": "synthetic_offline_fixture",
   "dataset_split": "final",
-  "dataset_source_id": "fixed_offline_baseline_short_01",
+  "source_article_id": "fixed_offline_baseline_short_01",
   "truncation_rule": "fixed_offline_bucket_v1",
   "prompt_fixture_sha256": "cc80a3402ea0583a27478d48a7c4dddff85073ec33c3cd964d9d58ce9558d61e",
   "tokenizer_runtime_used": "llama_3_2_1b_instruct_tokenizer",

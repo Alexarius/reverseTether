@@ -54,7 +54,7 @@ class TestBenchmarkLogging(unittest.TestCase):
             fixture_prompt_token_count=45,
             dataset_name="smoke_dataset",
             dataset_split="dev",
-            dataset_source_id="smoke_source_01",
+            source_article_id="smoke_source_01",
             truncation_rule="none",
             tokenizer_runtime_used="test_tokenizer",
             model_name="Llama-3.2-1B-Instruct",
@@ -147,7 +147,7 @@ class TestBenchmarkLogging(unittest.TestCase):
             self.assertEqual(record.prompt_token_count_source, "llama.cpp_server")
             self.assertEqual(record.dataset_name, "smoke_dataset")
             self.assertEqual(record.dataset_split, "dev")
-            self.assertEqual(record.dataset_source_id, "smoke_source_01")
+            self.assertEqual(record.source_article_id, "smoke_source_01")
             self.assertEqual(record.truncation_rule, "none")
             self.assertEqual(record.prompt_fixture_sha256, expected_hash)
             self.assertEqual(record.tokenizer_runtime_used, "test_tokenizer")
@@ -164,7 +164,7 @@ class TestBenchmarkLogging(unittest.TestCase):
             self.assertEqual(raw_record["prompt_token_count_source"], "llama.cpp_server")
             self.assertEqual(raw_record["dataset_name"], "smoke_dataset")
             self.assertEqual(raw_record["dataset_split"], "dev")
-            self.assertEqual(raw_record["dataset_source_id"], "smoke_source_01")
+            self.assertEqual(raw_record["source_article_id"], "smoke_source_01")
             self.assertEqual(raw_record["truncation_rule"], "none")
             self.assertEqual(raw_record["prompt_fixture_sha256"], expected_hash)
             self.assertEqual(raw_record["tokenizer_runtime_used"], "test_tokenizer")
@@ -550,8 +550,8 @@ class TestCachePolicyEvaluation(unittest.TestCase):
         self.assertEqual(raw_record["runtime_prompt_eval_token_count"], 1)
         self.assertTrue(raw_record["cache_mismatch"])
 
-    def test_one_token_fast_collapse_is_preserved_with_fixture_count(self):
-        """A 1-token runtime eval stays collapsed even when fixture metadata exists."""
+    def test_one_token_large_fixture_sets_mismatch(self):
+        """A 1-token runtime eval is collapsed when the fixture is much larger."""
         cache_expected, cache_observed, cache_mismatch = evaluate_cache_policy(
             cache_policy="disabled",
             fixture_prompt_token_count=200,
@@ -562,6 +562,8 @@ class TestCachePolicyEvaluation(unittest.TestCase):
         self.assertEqual(cache_observed, "collapsed_eval")
         self.assertTrue(cache_mismatch)
 
+    def test_small_fixture_within_two_tokens_passes(self):
+        """Small fixtures still use the same +/-2 full-eval tolerance."""
         cache_expected, cache_observed, cache_mismatch = evaluate_cache_policy(
             cache_policy="disabled",
             fixture_prompt_token_count=2,
@@ -569,8 +571,8 @@ class TestCachePolicyEvaluation(unittest.TestCase):
         )
 
         self.assertFalse(cache_expected)
-        self.assertEqual(cache_observed, "collapsed_eval")
-        self.assertTrue(cache_mismatch)
+        self.assertEqual(cache_observed, "full_eval")
+        self.assertFalse(cache_mismatch)
 
     def test_more_than_two_tokens_below_fixture_sets_mismatch(self):
         """A runtime prompt eval count more than two below fixture is collapsed."""
@@ -618,6 +620,19 @@ class TestCachePolicyEvaluation(unittest.TestCase):
         self.assertTrue(record.cache_expected)
         self.assertEqual(record.cache_observed, "collapsed_eval")
         self.assertFalse(record.cache_mismatch)
+
+    def test_warm_cache_policy_flags_full_eval_as_mismatch(self):
+        """Expected cache reuse must flag full prompt evaluation as a mismatch."""
+        record, raw_record = self._run_with_runtime_prompt_count(
+            cache_policy="warm_cache",
+            fixture_prompt_token_count=100,
+            runtime_prompt_eval_token_count=100,
+        )
+
+        self.assertTrue(record.cache_expected)
+        self.assertEqual(record.cache_observed, "full_eval")
+        self.assertTrue(record.cache_mismatch)
+        self.assertTrue(raw_record["cache_mismatch"])
 
     def test_synthetic_expected_cache_policy_raises_before_streaming(self):
         """Final evidence runs must fail before invocation if cache reuse is expected."""
@@ -1059,7 +1074,7 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
                 "fixture_prompt_token_count": 88,
                 "dataset_name": "smoke_dataset",
                 "dataset_split": "dev",
-                "dataset_source_id": "soak_01",
+                "source_article_id": "soak_01",
                 "truncation_rule": "none",
                 "prompt_fixture_sha256": "ignored_config_hash",
                 "tokenizer_runtime_used": "test_tokenizer",
@@ -1078,7 +1093,7 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
                         "fixture_prompt_token_count": 37,
                         "dataset_name": "smoke_dataset",
                         "dataset_split": "dev",
-                        "dataset_source_id": "short_01",
+                        "source_article_id": "short_01",
                         "truncation_rule": "none",
                         "prompt_fixture_sha256": "ignored_config_hash",
                         "tokenizer_runtime_used": "test_tokenizer",
@@ -1110,7 +1125,7 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
                 self.assertIn("prompt_token_count_source", record)
                 self.assertIn("dataset_name", record)
                 self.assertIn("dataset_split", record)
-                self.assertIn("dataset_source_id", record)
+                self.assertIn("source_article_id", record)
                 self.assertIn("truncation_rule", record)
                 self.assertIn("prompt_fixture_sha256", record)
                 self.assertIn("tokenizer_runtime_used", record)
@@ -1135,7 +1150,7 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
                         record["prompt_tier"],
                         record["fixture_prompt_token_count"],
                         record["dataset_name"],
-                        record["dataset_source_id"],
+                        record["source_article_id"],
                         record["prompt_fixture_sha256"],
                     )
                     for record in records

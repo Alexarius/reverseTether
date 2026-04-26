@@ -36,13 +36,33 @@ FINAL_DATASET_BUCKET_TOKEN_RANGES = {
 FINAL_DATASET_FIXTURE_METADATA_FIELDS = {
     "dataset_name",
     "dataset_split",
-    "dataset_source_id",
+    "source_article_id",
     "truncation_rule",
     "prompt_fixture_sha256",
     "tokenizer_runtime_used",
 }
 FINAL_PROMPT_TIERS = {"short", "medium", "long"}
 VALID_SUITE_TYPES = {SMOKE_SUITE_TYPE, FINAL_DATASET_SUITE_TYPE}
+
+
+def translate_matrix_node_args(raw_args: list[str]) -> list[str]:
+    """Translate compact matrix-node shorthand into client.matrix arguments."""
+    if len(raw_args) < 4:
+        raise ValueError(
+            "matrix-node requires '<node>-backend <backend>-regimes <regimes>'"
+        )
+
+    _, node_token, backend_token, regimes, *rest = raw_args
+    if not node_token.endswith("-backend"):
+        raise ValueError("matrix-node node token must look like '<node>-backend'")
+    if not backend_token.endswith("-regimes"):
+        raise ValueError(
+            "matrix-node backend token must look like '<backend>-regimes'"
+        )
+
+    node = node_token[: -len("-backend")]
+    backend = backend_token[: -len("-regimes")]
+    return ["--node", node, "--backend", backend, "--regimes", regimes, *rest]
 
 
 def validate_prompt_suite(suite: dict) -> None:
@@ -284,6 +304,20 @@ def get_prompt_for_tier(suite: dict, tier: str) -> dict:
 
 
 def main():
+    raw_args = sys.argv[1:]
+    if raw_args and raw_args[0] == "matrix-node":
+        try:
+            matrix_args = translate_matrix_node_args(raw_args)
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(2)
+
+        from .matrix import main as matrix_main
+
+        sys.argv = [sys.argv[0], *matrix_args]
+        matrix_main()
+        return
+
     parser = argparse.ArgumentParser(
         description="Laptop benchmark harness for llama.cpp server",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -481,7 +515,7 @@ Mock mode:
         help="Known anomalies affecting this run"
     )
 
-    args = parser.parse_args()
+    args = parser.parse_args(raw_args)
 
     # Load prompt suite
     try:
@@ -599,7 +633,7 @@ Mock mode:
             fixture_prompt_token_count=prompt_obj.get("fixture_prompt_token_count"),
             dataset_name=prompt_obj.get("dataset_name", ""),
             dataset_split=prompt_obj.get("dataset_split", ""),
-            dataset_source_id=prompt_obj.get("dataset_source_id", ""),
+            source_article_id=prompt_obj.get("source_article_id", ""),
             truncation_rule=prompt_obj.get("truncation_rule", ""),
             prompt_fixture_sha256=actual_hash,
             tokenizer_runtime_used=prompt_obj.get("tokenizer_runtime_used", ""),

@@ -35,6 +35,7 @@ class TestAggregateOutputLayout(unittest.TestCase):
                         "cache_expected": False,
                         "cache_observed": "full_eval",
                         "cache_mismatch": False,
+                        "source_article_id": "fixed_offline_baseline_short_01",
                         "stop_reason": "eos",
                         "ttft_ms": 100.0,
                         "decode_tps": 12.5,
@@ -152,6 +153,7 @@ class TestAggregateFiltering(unittest.TestCase):
                         "cache_expected": False,
                         "cache_observed": "full_eval",
                         "cache_mismatch": False,
+                        "source_article_id": "fixed_offline_baseline_short_01",
                     },
                 ]
             )
@@ -237,6 +239,7 @@ class TestAggregateFiltering(unittest.TestCase):
                         "cache_expected": False,
                         "cache_observed": "full_eval",
                         "cache_mismatch": False,
+                        "source_article_id": "fixed_offline_baseline_short_01",
                     },
                 ]
             )
@@ -308,6 +311,7 @@ class TestAggregateFiltering(unittest.TestCase):
                         "cache_expected": False,
                         "cache_observed": "full_eval",
                         "cache_mismatch": False,
+                        "source_article_id": "fixed_offline_baseline_short_01",
                     },
                 ]
             )
