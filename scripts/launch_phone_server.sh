@@ -28,6 +28,7 @@ SERVER_HOST="127.0.0.1"
 
 BACKEND="cpu"
 MODEL_PATH="${DEFAULT_MODEL_PATH}"
+EXTRA_ARGS=""
 VERBOSE=0
 
 print_usage() {
@@ -39,6 +40,8 @@ print_usage() {
     echo "  --cpu          CPU-only mode (default, -ngl 0)"
     echo "  --gpu          GPU/OpenCL mode (-ngl 99)"
     echo "  --model PATH   Path to GGUF model file"
+    echo "  --extra-args ARGS"
+    echo "                 Extra llama-server args appended to the launch command"
     echo "  --verbose      Print detailed launch info"
     echo "  --help         Show this help message"
     echo ""
@@ -58,6 +61,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --model)
             MODEL_PATH="$2"
+            shift 2
+            ;;
+        --extra-args)
+            EXTRA_ARGS="$2"
             shift 2
             ;;
         --verbose)
@@ -127,7 +134,7 @@ if [[ ${VERBOSE} -eq 1 ]]; then
     echo "    -c ${CONTEXT_LENGTH} \\"
     echo "    --port ${SERVER_PORT} \\"
     echo "    --host ${SERVER_HOST} \\"
-    echo "    -ngl ${NGL}"
+    echo "    -ngl ${NGL} ${EXTRA_ARGS}"
     echo ""
 fi
 
@@ -143,4 +150,5 @@ exec "${SERVER_BIN}" \
     -c "${CONTEXT_LENGTH}" \
     --port "${SERVER_PORT}" \
     --host "${SERVER_HOST}" \
-    -ngl "${NGL}"
+    -ngl "${NGL}" \
+    ${EXTRA_ARGS}
