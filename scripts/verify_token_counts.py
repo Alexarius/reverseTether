@@ -232,7 +232,7 @@ def main() -> int:
     )
     print_results(results)
 
-    if any(result.status in {"Mismatch", "Error"} for result in results):
+    if any(result.status in {"Mismatch", "Error", "Skipped"} for result in results):
         return 1
     return 0
 

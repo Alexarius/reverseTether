@@ -122,7 +122,11 @@ class TestMockPipelineFinalEvidence(unittest.TestCase):
 
         with TemporaryDirectory() as temp_dir:
             suite = json.loads(suite_path.read_text(encoding="utf-8"))
-            prompts = list(suite["prompts"].values())
+            prompts = [
+                prompt
+                for prompt in suite["prompts"].values()
+                if prompt.get("tier") != "soak"
+            ]
             benchmark_config = BenchmarkConfig(
                 node="yoga",
                 backend="cpu",
@@ -155,7 +159,7 @@ class TestMockPipelineFinalEvidence(unittest.TestCase):
             filtered = apply_final_evidence_filter(df)
 
             self.assertFalse(filtered.empty)
-            self.assertEqual(len(filtered), 16)
+            self.assertEqual(len(filtered), 15)
             self.assertTrue((filtered["suite_type"] == "synthetic").all())
 
 

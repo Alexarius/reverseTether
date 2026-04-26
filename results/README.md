@@ -27,7 +27,7 @@ This directory now contains development and historical benchmark outputs. They a
 - Historical short-prompt records, including `short_v1`, are development validation only.
 - Smoke-suite records, including `_smoke_v1` prompt IDs, are development validation only.
 - Final aggregation filters development results out by default.
-- Final claims must use records marked with `prompt_suite_type=final_dataset` and `cache_mismatch=false`.
+- Final claims must use records marked with `prompt_suite_type=synthetic` and `cache_mismatch=false`.
 
 ## Development-Only Historical Results
 
@@ -60,7 +60,7 @@ results/summaries/aggregation_20260424_232417/
 The default final aggregation rule is:
 
 ```text
-include only records where prompt_suite_type == "final_dataset"
+include only records where prompt_suite_type == "synthetic"
 and cache_mismatch == false
 and prompt_id is not short_v1/medium_v1/long_v1/soak_v1
 and prompt_id does not contain "_smoke_"

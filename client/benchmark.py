@@ -478,6 +478,7 @@ def write_metadata_file(config: BenchmarkConfig, output_dir: Path) -> Path:
         "run_type": config.run_type,
         "prompt_tier": config.prompt_tier,
         "suite_type": config.suite_type,
+        "prompt_suite_type": config.suite_type,
         "prompt_suite_id": config.prompt_suite_id,
         "prompt_suite_version": config.prompt_suite_version,
         "cache_policy": config.cache_policy,
@@ -544,6 +545,12 @@ def write_run_record(record: RunRecord, output_dir: Path) -> Path:
     """
     metrics_file = output_dir / "raw_metrics.jsonl"
     record_dict = asdict(record)
+    record_dict_with_alias = {}
+    for key, value in record_dict.items():
+        record_dict_with_alias[key] = value
+        if key == "suite_type":
+            record_dict_with_alias["prompt_suite_type"] = value
+    record_dict = record_dict_with_alias
 
     with open(metrics_file, "a", encoding="utf-8") as f:
         f.write(json.dumps(record_dict) + "\n")
@@ -885,6 +892,7 @@ def write_matrix_metadata(
         "selected_prompt_ids": _matrix_selected_prompt_ids(matrix_config, prompts),
         "dry_run": matrix_config.dry_run,
         "suite_type": base_config.suite_type,
+        "prompt_suite_type": base_config.suite_type,
         "prompt_suite_id": base_config.prompt_suite_id,
         "prompt_suite_version": base_config.prompt_suite_version,
         "cache_policy": base_config.cache_policy,

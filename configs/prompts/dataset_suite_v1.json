@@ -15,7 +15,7 @@
     "final_short_01": {
       "id": "final_short_01",
       "tier": "short",
-      "fixture_prompt_token_count": 128,
+      "fixture_prompt_token_count": 47,
       "dataset_name": "synthetic_offline_fixture",
       "dataset_split": "final",
       "dataset_source_id": "fixed_offline_baseline_short_01",
@@ -28,7 +28,7 @@
     "final_short_02": {
       "id": "final_short_02",
       "tier": "short",
-      "fixture_prompt_token_count": 130,
+      "fixture_prompt_token_count": 45,
       "dataset_name": "synthetic_offline_fixture",
       "dataset_split": "final",
       "dataset_source_id": "fixed_offline_baseline_short_02",
@@ -41,7 +41,7 @@
     "final_short_03": {
       "id": "final_short_03",
       "tier": "short",
-      "fixture_prompt_token_count": 132,
+      "fixture_prompt_token_count": 45,
       "dataset_name": "synthetic_offline_fixture",
       "dataset_split": "final",
       "dataset_source_id": "fixed_offline_baseline_short_03",
@@ -54,7 +54,7 @@
     "final_short_04": {
       "id": "final_short_04",
       "tier": "short",
-      "fixture_prompt_token_count": 134,
+      "fixture_prompt_token_count": 47,
       "dataset_name": "synthetic_offline_fixture",
       "dataset_split": "final",
       "dataset_source_id": "fixed_offline_baseline_short_04",
@@ -67,7 +67,7 @@
     "final_short_05": {
       "id": "final_short_05",
       "tier": "short",
-      "fixture_prompt_token_count": 136,
+      "fixture_prompt_token_count": 44,
       "dataset_name": "synthetic_offline_fixture",
       "dataset_split": "final",
       "dataset_source_id": "fixed_offline_baseline_short_05",
@@ -80,7 +80,7 @@
     "final_medium_01": {
       "id": "final_medium_01",
       "tier": "medium",
-      "fixture_prompt_token_count": 560,
+      "fixture_prompt_token_count": 476,
       "dataset_name": "synthetic_offline_fixture",
       "dataset_split": "final",
       "dataset_source_id": "fixed_offline_baseline_medium_01",
@@ -93,7 +93,7 @@
     "final_medium_02": {
       "id": "final_medium_02",
       "tier": "medium",
-      "fixture_prompt_token_count": 562,
+      "fixture_prompt_token_count": 480,
       "dataset_name": "synthetic_offline_fixture",
       "dataset_split": "final",
       "dataset_source_id": "fixed_offline_baseline_medium_02",
@@ -106,7 +106,7 @@
     "final_medium_03": {
       "id": "final_medium_03",
       "tier": "medium",
-      "fixture_prompt_token_count": 564,
+      "fixture_prompt_token_count": 478,
       "dataset_name": "synthetic_offline_fixture",
       "dataset_split": "final",
       "dataset_source_id": "fixed_offline_baseline_medium_03",
@@ -119,7 +119,7 @@
     "final_medium_04": {
       "id": "final_medium_04",
       "tier": "medium",
-      "fixture_prompt_token_count": 566,
+      "fixture_prompt_token_count": 476,
       "dataset_name": "synthetic_offline_fixture",
       "dataset_split": "final",
       "dataset_source_id": "fixed_offline_baseline_medium_04",
@@ -132,7 +132,7 @@
     "final_medium_05": {
       "id": "final_medium_05",
       "tier": "medium",
-      "fixture_prompt_token_count": 568,
+      "fixture_prompt_token_count": 476,
       "dataset_name": "synthetic_offline_fixture",
       "dataset_split": "final",
       "dataset_source_id": "fixed_offline_baseline_medium_05",
@@ -145,7 +145,7 @@
     "final_long_01": {
       "id": "final_long_01",
       "tier": "long",
-      "fixture_prompt_token_count": 1300,
+      "fixture_prompt_token_count": 1492,
       "dataset_name": "synthetic_offline_fixture",
       "dataset_split": "final",
       "dataset_source_id": "fixed_offline_baseline_long_01",
@@ -158,7 +158,7 @@
     "final_long_02": {
       "id": "final_long_02",
       "tier": "long",
-      "fixture_prompt_token_count": 1302,
+      "fixture_prompt_token_count": 1488,
       "dataset_name": "synthetic_offline_fixture",
       "dataset_split": "final",
       "dataset_source_id": "fixed_offline_baseline_long_02",
@@ -171,7 +171,7 @@
     "final_long_03": {
       "id": "final_long_03",
       "tier": "long",
-      "fixture_prompt_token_count": 1304,
+      "fixture_prompt_token_count": 1522,
       "dataset_name": "synthetic_offline_fixture",
       "dataset_split": "final",
       "dataset_source_id": "fixed_offline_baseline_long_03",
@@ -184,7 +184,7 @@
     "final_long_04": {
       "id": "final_long_04",
       "tier": "long",
-      "fixture_prompt_token_count": 1306,
+      "fixture_prompt_token_count": 1491,
       "dataset_name": "synthetic_offline_fixture",
       "dataset_split": "final",
       "dataset_source_id": "fixed_offline_baseline_long_04",
@@ -197,7 +197,7 @@
     "final_long_05": {
       "id": "final_long_05",
       "tier": "long",
-      "fixture_prompt_token_count": 1308,
+      "fixture_prompt_token_count": 1496,
       "dataset_name": "synthetic_offline_fixture",
       "dataset_split": "final",
       "dataset_source_id": "fixed_offline_baseline_long_05",
@@ -210,7 +210,7 @@
     "final_soak_01": {
       "id": "final_soak_01",
       "tier": "soak",
-      "fixture_prompt_token_count": 560,
+      "fixture_prompt_token_count": 115,
       "dataset_name": "synthetic_offline_fixture",
       "dataset_split": "final",
       "dataset_source_id": "fixed_offline_baseline_soak_01",
