@@ -1,6 +1,7 @@
 """Tests for benchmark CLI validation behavior."""
 
 import io
+import hashlib
 import json
 import unittest
 from pathlib import Path
@@ -24,7 +25,6 @@ FINAL_DATASET_FIXTURE_METADATA_FIELDS = {
     "dataset_name",
     "dataset_split",
     "dataset_source_id",
-    "source_article_sha256",
     "truncation_rule",
     "prompt_fixture_sha256",
     "tokenizer_runtime_used",
@@ -103,17 +103,19 @@ class TestPromptSuiteValidation(unittest.TestCase):
         for tier, count in [("short", 5), ("medium", 5), ("long", 5), ("soak", 1)]:
             for index in range(1, count + 1):
                 prompt_key = f"final_{tier}_{index}"
+                prompt_text = f"{tier} prompt {index}"
                 prompts[prompt_key] = {
                     "id": prompt_key,
                     "tier": tier,
-                    "text": f"{tier} prompt {index}",
+                    "text": prompt_text,
                     "fixture_prompt_token_count": VALID_FINAL_DATASET_TOKEN_COUNTS[tier],
                     "dataset_name": "synthetic_offline_fixture",
                     "dataset_split": "placeholder_validation",
                     "dataset_source_id": f"placeholder_{prompt_key}",
-                    "source_article_sha256": f"placeholder_source_sha256_{prompt_key}",
                     "truncation_rule": f"placeholder_fixed_{tier}_bucket_v1",
-                    "prompt_fixture_sha256": f"placeholder_fixture_sha256_{prompt_key}",
+                    "prompt_fixture_sha256": hashlib.sha256(
+                        prompt_text.encode("utf-8")
+                    ).hexdigest(),
                     "tokenizer_runtime_used": (
                         "placeholder_llama_3_2_1b_instruct_tokenizer"
                     ),
@@ -805,21 +807,22 @@ class TestCliValidation(unittest.TestCase):
 
     def test_main_extracts_prompt_text_and_id_from_fixture_object(self):
         """CLI loop should pass text and id from prompt fixture objects."""
+        prompt_text = "mock_prompt_text"
+        expected_hash = hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()
         suite = {
             "version": "1.2.3",
             "suite_type": "smoke",
             "prompts": {
                 "short": {
                     "tier": "short",
-                    "text": "Test prompt",
+                    "text": prompt_text,
                     "id": "short_smoke_v1",
                     "fixture_prompt_token_count": 37,
                     "dataset_name": "smoke_dataset",
                     "dataset_split": "dev",
                     "dataset_source_id": "smoke_001",
-                    "source_article_sha256": "source_sha",
                     "truncation_rule": "none",
-                    "prompt_fixture_sha256": "fixture_sha",
+                    "prompt_fixture_sha256": "ignored_config_hash",
                     "tokenizer_runtime_used": "test_tokenizer",
                 }
             },
@@ -860,7 +863,7 @@ class TestCliValidation(unittest.TestCase):
         ):
             cli_main()
 
-        self.assertEqual(run_mock.call_args.kwargs["prompt"], "Test prompt")
+        self.assertEqual(run_mock.call_args.kwargs["prompt"], prompt_text)
         self.assertEqual(run_mock.call_args.kwargs["prompt_id"], "short_smoke_v1")
         config = run_mock.call_args.kwargs["config"]
         self.assertEqual(config.suite_type, "smoke")
@@ -871,9 +874,8 @@ class TestCliValidation(unittest.TestCase):
         self.assertEqual(config.dataset_name, "smoke_dataset")
         self.assertEqual(config.dataset_split, "dev")
         self.assertEqual(config.dataset_source_id, "smoke_001")
-        self.assertEqual(config.source_article_sha256, "source_sha")
         self.assertEqual(config.truncation_rule, "none")
-        self.assertEqual(config.prompt_fixture_sha256, "fixture_sha")
+        self.assertEqual(config.prompt_fixture_sha256, expected_hash)
         self.assertEqual(config.tokenizer_runtime_used, "test_tokenizer")
 
 

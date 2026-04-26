@@ -172,7 +172,6 @@ class TestRunRecord(unittest.TestCase):
         self.assertEqual(record.dataset_name, "")
         self.assertEqual(record.dataset_split, "")
         self.assertEqual(record.dataset_source_id, "")
-        self.assertEqual(record.source_article_sha256, "")
         self.assertEqual(record.truncation_rule, "")
         self.assertEqual(record.prompt_fixture_sha256, "")
         self.assertEqual(record.tokenizer_runtime_used, "")

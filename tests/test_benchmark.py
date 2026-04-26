@@ -11,6 +11,7 @@ Critical timing boundaries (from EXPERIMENT_PROTOCOL.md):
 - final_token_ts: recorded when last token arrives
 """
 
+import hashlib
 import json
 import unittest
 from datetime import datetime
@@ -54,9 +55,7 @@ class TestBenchmarkLogging(unittest.TestCase):
             dataset_name="smoke_dataset",
             dataset_split="dev",
             dataset_source_id="smoke_source_01",
-            source_article_sha256="source_sha",
             truncation_rule="none",
-            prompt_fixture_sha256="fixture_sha",
             tokenizer_runtime_used="test_tokenizer",
             model_name="Llama-3.2-1B-Instruct",
             model_sha256=VALID_MODEL_SHA256,
@@ -91,8 +90,12 @@ class TestBenchmarkLogging(unittest.TestCase):
                 "client.benchmark.stream_completion",
                 return_value=(timing, [{"tokens_evaluated": 43}], "eos"),
             ), patch("client.benchmark.uuid.uuid4", return_value="test-run-id"):
+                prompt_text = "mock_prompt_text"
+                expected_hash = hashlib.sha256(
+                    prompt_text.encode("utf-8")
+                ).hexdigest()
                 record = run_benchmark(
-                    prompt="Test prompt",
+                    prompt=prompt_text,
                     prompt_id="short_smoke_v1",
                     config=config,
                     output_dir=output_dir,
@@ -115,6 +118,7 @@ class TestBenchmarkLogging(unittest.TestCase):
             self.assertEqual(metadata["prompt_suite_version"], "1.0.0")
             self.assertEqual(metadata["server_mode"], "local")
             self.assertEqual(metadata["model_name"], "Llama-3.2-1B-Instruct")
+            self.assertEqual(metadata["prompt_fixture_sha256"], expected_hash)
             self.assertEqual(metadata["start_temperature_c"], 32.5)
             self.assertEqual(metadata["end_temperature_c"], 34.0)
             self.assertEqual(metadata["temperature_source"], "sysfs_power_supply_battery_temp")
@@ -143,9 +147,8 @@ class TestBenchmarkLogging(unittest.TestCase):
             self.assertEqual(record.dataset_name, "smoke_dataset")
             self.assertEqual(record.dataset_split, "dev")
             self.assertEqual(record.dataset_source_id, "smoke_source_01")
-            self.assertEqual(record.source_article_sha256, "source_sha")
             self.assertEqual(record.truncation_rule, "none")
-            self.assertEqual(record.prompt_fixture_sha256, "fixture_sha")
+            self.assertEqual(record.prompt_fixture_sha256, expected_hash)
             self.assertEqual(record.tokenizer_runtime_used, "test_tokenizer")
             self.assertFalse(record.cache_expected)
             self.assertEqual(record.cache_observed, "full_eval")
@@ -160,9 +163,8 @@ class TestBenchmarkLogging(unittest.TestCase):
             self.assertEqual(raw_record["dataset_name"], "smoke_dataset")
             self.assertEqual(raw_record["dataset_split"], "dev")
             self.assertEqual(raw_record["dataset_source_id"], "smoke_source_01")
-            self.assertEqual(raw_record["source_article_sha256"], "source_sha")
             self.assertEqual(raw_record["truncation_rule"], "none")
-            self.assertEqual(raw_record["prompt_fixture_sha256"], "fixture_sha")
+            self.assertEqual(raw_record["prompt_fixture_sha256"], expected_hash)
             self.assertEqual(raw_record["tokenizer_runtime_used"], "test_tokenizer")
             self.assertFalse(raw_record["cache_expected"])
             self.assertEqual(raw_record["cache_observed"], "full_eval")
@@ -1056,9 +1058,8 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
                 "dataset_name": "smoke_dataset",
                 "dataset_split": "dev",
                 "dataset_source_id": "soak_01",
-                "source_article_sha256": "soak_sha",
                 "truncation_rule": "none",
-                "prompt_fixture_sha256": "soak_fixture_sha",
+                "prompt_fixture_sha256": "ignored_config_hash",
                 "tokenizer_runtime_used": "test_tokenizer",
             },
             dry_run=False,
@@ -1076,9 +1077,8 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
                         "dataset_name": "smoke_dataset",
                         "dataset_split": "dev",
                         "dataset_source_id": "short_01",
-                        "source_article_sha256": "short_sha",
                         "truncation_rule": "none",
-                        "prompt_fixture_sha256": "short_fixture_sha",
+                        "prompt_fixture_sha256": "ignored_config_hash",
                         "tokenizer_runtime_used": "test_tokenizer",
                     }
                 ],
@@ -1108,7 +1108,6 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
                 self.assertIn("dataset_name", record)
                 self.assertIn("dataset_split", record)
                 self.assertIn("dataset_source_id", record)
-                self.assertIn("source_article_sha256", record)
                 self.assertIn("truncation_rule", record)
                 self.assertIn("prompt_fixture_sha256", record)
                 self.assertIn("tokenizer_runtime_used", record)
@@ -1122,6 +1121,8 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
                 self.assertEqual(record["prompt_token_count_source"], "llama.cpp_server")
 
             records = [json.loads(line) for line in lines]
+            expected_short_hash = hashlib.sha256(b"Test prompt").hexdigest()
+            expected_soak_hash = hashlib.sha256(b"Soak prompt").hexdigest()
             self.assertEqual(
                 [
                     (
@@ -1131,14 +1132,47 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
                         record["fixture_prompt_token_count"],
                         record["dataset_name"],
                         record["dataset_source_id"],
+                        record["prompt_fixture_sha256"],
                     )
                     for record in records
                 ],
                 [
-                    ("warm", "short_smoke_v1", "short", 37, "smoke_dataset", "short_01"),
-                    ("warm", "short_smoke_v1", "short", 37, "smoke_dataset", "short_01"),
-                    ("soak", "soak_smoke_v1", "soak", 88, "smoke_dataset", "soak_01"),
-                    ("soak", "soak_smoke_v1", "soak", 88, "smoke_dataset", "soak_01"),
+                    (
+                        "warm",
+                        "short_smoke_v1",
+                        "short",
+                        37,
+                        "smoke_dataset",
+                        "short_01",
+                        expected_short_hash,
+                    ),
+                    (
+                        "warm",
+                        "short_smoke_v1",
+                        "short",
+                        37,
+                        "smoke_dataset",
+                        "short_01",
+                        expected_short_hash,
+                    ),
+                    (
+                        "soak",
+                        "soak_smoke_v1",
+                        "soak",
+                        88,
+                        "smoke_dataset",
+                        "soak_01",
+                        expected_soak_hash,
+                    ),
+                    (
+                        "soak",
+                        "soak_smoke_v1",
+                        "soak",
+                        88,
+                        "smoke_dataset",
+                        "soak_01",
+                        expected_soak_hash,
+                    ),
                 ],
             )
 

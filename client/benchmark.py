@@ -12,11 +12,12 @@ Critical timing notes (from implementation plan):
 - Token counting uses server-reported values when available
 """
 
+import hashlib
 import json
 import re
 import time
 import uuid
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, Iterator, List, Optional
@@ -84,7 +85,6 @@ class BenchmarkConfig:
     dataset_name: str = ""
     dataset_split: str = ""
     dataset_source_id: str = ""
-    source_article_sha256: str = ""
     truncation_rule: str = ""
     prompt_fixture_sha256: str = ""
     tokenizer_runtime_used: str = ""
@@ -488,7 +488,6 @@ def write_metadata_file(config: BenchmarkConfig, output_dir: Path) -> Path:
         "dataset_name": config.dataset_name,
         "dataset_split": config.dataset_split,
         "dataset_source_id": config.dataset_source_id,
-        "source_article_sha256": config.source_article_sha256,
         "truncation_rule": config.truncation_rule,
         "prompt_fixture_sha256": config.prompt_fixture_sha256,
         "tokenizer_runtime_used": config.tokenizer_runtime_used,
@@ -619,7 +618,6 @@ def create_failed_run_record(
         dataset_name=config.dataset_name,
         dataset_split=config.dataset_split,
         dataset_source_id=config.dataset_source_id,
-        source_article_sha256=config.source_article_sha256,
         truncation_rule=config.truncation_rule,
         prompt_fixture_sha256=config.prompt_fixture_sha256,
         tokenizer_runtime_used=config.tokenizer_runtime_used,
@@ -664,6 +662,9 @@ def run_benchmark(
     Returns:
         Completed RunRecord with all metrics
     """
+    actual_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+    config = replace(config, prompt_fixture_sha256=actual_hash)
+
     validate_reproducibility_fields(config)
     cache_expected, cache_observed, cache_mismatch = evaluate_cache_policy(
         cache_policy=config.cache_policy,
@@ -765,7 +766,6 @@ def run_benchmark(
         dataset_name=config.dataset_name,
         dataset_split=config.dataset_split,
         dataset_source_id=config.dataset_source_id,
-        source_article_sha256=config.source_article_sha256,
         truncation_rule=config.truncation_rule,
         prompt_fixture_sha256=config.prompt_fixture_sha256,
         tokenizer_runtime_used=config.tokenizer_runtime_used,
@@ -1054,6 +1054,7 @@ def run_matrix(
         for prompt_obj in _prompts_for_regime(regime, prompts, matrix_config):
             prompt = prompt_obj["text"]
             prompt_id = prompt_obj["id"]
+            actual_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
             fixture_prompt_token_count = prompt_obj.get("fixture_prompt_token_count")
             if regime == "soak":
                 prompt_tier = "soak"
@@ -1079,9 +1080,8 @@ def run_matrix(
                     dataset_name=prompt_obj.get("dataset_name", ""),
                     dataset_split=prompt_obj.get("dataset_split", ""),
                     dataset_source_id=prompt_obj.get("dataset_source_id", ""),
-                    source_article_sha256=prompt_obj.get("source_article_sha256", ""),
                     truncation_rule=prompt_obj.get("truncation_rule", ""),
-                    prompt_fixture_sha256=prompt_obj.get("prompt_fixture_sha256", ""),
+                    prompt_fixture_sha256=actual_hash,
                     tokenizer_runtime_used=prompt_obj.get("tokenizer_runtime_used", ""),
                     host=base_config.host,
                     port=base_config.port,

@@ -53,9 +53,8 @@ Final aggregation must include only records from the synthetic final suite. Smok
       "dataset_name": "synthetic_offline_fixture",
       "dataset_split": "final",
       "dataset_source_id": "<stable_source_record_id>",
-      "source_article_sha256": "<source_article_hash_or_placeholder>",
       "truncation_rule": "<documented_rule>",
-      "prompt_fixture_sha256": "<prompt_fixture_hash_or_placeholder>",
+      "prompt_fixture_sha256": "<sha256_of_final_prompt_text>",
       "tokenizer_runtime_used": "<tokenizer_runtime>",
       "description": "<purpose>",
       "text": "<prompt text>"
@@ -83,9 +82,8 @@ Synthetic final prompts must include:
 - `dataset_name`, such as `synthetic_offline_fixture`.
 - `dataset_split`, such as `final`.
 - `dataset_source_id` that traces the fixture to the source dataset record or fixed offline source.
-- `source_article_sha256` for the selected source article or fixed offline placeholder.
 - `truncation_rule` describing how the source text was shortened or shaped.
-- `prompt_fixture_sha256` for the final prompt fixture text or fixed offline placeholder.
+- `prompt_fixture_sha256` as the SHA-256 hash of the final prompt text.
 - `tokenizer_runtime_used` naming the tokenizer/runtime used for fixture counts.
 - Full prompt `text` as sent to the benchmark client.
 

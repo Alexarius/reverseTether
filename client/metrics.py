@@ -180,7 +180,6 @@ class RunRecord:
     dataset_name: str = ""
     dataset_split: str = ""
     dataset_source_id: str = ""
-    source_article_sha256: str = ""
     truncation_rule: str = ""
     prompt_fixture_sha256: str = ""
     tokenizer_runtime_used: str = ""

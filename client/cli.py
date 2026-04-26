@@ -8,6 +8,7 @@ No elaborate UI - just command-line interface for measurement.
 """
 
 import argparse
+import hashlib
 import json
 import sys
 from dataclasses import replace
@@ -36,7 +37,6 @@ FINAL_DATASET_FIXTURE_METADATA_FIELDS = {
     "dataset_name",
     "dataset_split",
     "dataset_source_id",
-    "source_article_sha256",
     "truncation_rule",
     "prompt_fixture_sha256",
     "tokenizer_runtime_used",
@@ -592,6 +592,7 @@ Mock mode:
     for prompt_obj in prompts:
         prompt_text = prompt_obj["text"]
         prompt_id = prompt_obj["id"]
+        actual_hash = hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()
         prompt_config = replace(
             config,
             prompt_tier=prompt_tiers_by_id[prompt_id],
@@ -599,9 +600,8 @@ Mock mode:
             dataset_name=prompt_obj.get("dataset_name", ""),
             dataset_split=prompt_obj.get("dataset_split", ""),
             dataset_source_id=prompt_obj.get("dataset_source_id", ""),
-            source_article_sha256=prompt_obj.get("source_article_sha256", ""),
             truncation_rule=prompt_obj.get("truncation_rule", ""),
-            prompt_fixture_sha256=prompt_obj.get("prompt_fixture_sha256", ""),
+            prompt_fixture_sha256=actual_hash,
             tokenizer_runtime_used=prompt_obj.get("tokenizer_runtime_used", ""),
         )
         if len(prompts) > 1:
