@@ -156,12 +156,14 @@ def build_completion_payload(prompt: str, config: BenchmarkConfig) -> dict:
     Returns:
         Dictionary payload for the API request
     """
+    cache_expected = (config.cache_policy or "").strip().lower() in WARM_CACHE_POLICIES
     return {
         "prompt": prompt,
         "n_predict": config.max_tokens,
         "temperature": config.temperature,
         "seed": config.seed,
         "stream": True,
+        "cache_prompt": cache_expected,
     }
 
 

@@ -231,7 +231,7 @@ absent or `null`. Missing thermal data must not be replaced with guessed values.
   "os_build_metadata": "Windows 11 Education 10.0.26200",
   "llama_cpp_commit": "abc123def456789012345678901234567890abcd",
   "llama_cpp_build_flags": "-DGGML_OPENCL=OFF",
-  "server_launch_args": "-m model.gguf -c 2048 -ngl 0",
+  "server_launch_args": "-m model.gguf -c 2048 -ngl 0 --cache-ram 0 -sps 0.0 -np 1",
   "model_name": "Meta-Llama-3.2-1B-Instruct",
   "model_filename": "llama-3.2-1b-instruct-q4_0.gguf",
   "model_sha256": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",

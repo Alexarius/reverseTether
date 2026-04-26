@@ -248,6 +248,30 @@ class TestCompletionPayload(unittest.TestCase):
         self.assertEqual(payload["n_predict"], 512)
         self.assertEqual(payload["prompt"], "Test prompt")
 
+    def test_payload_cache_prompt_false_when_disabled(self):
+        """Disabled cache policy must explicitly disable llama.cpp prompt caching."""
+        config = BenchmarkConfig(
+            node="yoga",
+            backend="cpu",
+            run_type="warm",
+            prompt_tier="short",
+            cache_policy="disabled",
+        )
+        payload = build_completion_payload("Test prompt", config)
+        self.assertFalse(payload["cache_prompt"])
+
+    def test_payload_cache_prompt_true_when_warm(self):
+        """Warm cache policy must preserve explicit prompt cache reuse."""
+        config = BenchmarkConfig(
+            node="yoga",
+            backend="cpu",
+            run_type="warm",
+            prompt_tier="short",
+            cache_policy="warm_cache",
+        )
+        payload = build_completion_payload("Test prompt", config)
+        self.assertTrue(payload["cache_prompt"])
+
 
 class TestStreamingTimingCapture(unittest.TestCase):
     """Tests for streaming timing capture behavior.

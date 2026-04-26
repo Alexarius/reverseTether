@@ -62,7 +62,10 @@ LD_LIBRARY_PATH=/vendor/lib64 ./build/bin/llama-server \
   -c 2048 \
   --port 8080 \
   --host 127.0.0.1 \
-  -ngl 0
+  -ngl 0 \
+  --cache-ram 0 \
+  -sps 0.0 \
+  -np 1
 ```
 
 **Parameter explanation**:
@@ -83,7 +86,10 @@ LD_LIBRARY_PATH=/vendor/lib64 ./build/bin/llama-server \
   -c 2048 \
   --port 8080 \
   --host 127.0.0.1 \
-  -ngl 99
+  -ngl 99 \
+  --cache-ram 0 \
+  -sps 0.0 \
+  -np 1
 ```
 
 - `-ngl 99`: Offload all layers to GPU

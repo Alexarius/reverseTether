@@ -116,7 +116,7 @@ Each cold-run repetition must use a fresh server process.
 
 1. Stop any existing llama.cpp server for the target condition.
 2. Verify the endpoint is unavailable before relaunch.
-3. Start the server with the approved model, quantization, context length, seed, and backend settings.
+3. Start the server with the approved model, quantization, context length, seed, and backend settings (e.g., adding `--cache-ram 0 -sps 0.0 -np 1` for strict isolation).
 4. Capture server launch arguments and server log path.
 5. Perform only non-generating readiness checks before the measured request.
 6. Send exactly one measured synthetic final prompt for that cold repetition.
