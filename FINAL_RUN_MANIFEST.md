@@ -11,7 +11,7 @@ This document does not redefine TTFT or decode TPS. TTFT remains measured at the
 Final dissertation evidence includes only records that satisfy all of the following:
 
 - `prompt_suite_type` is `synthetic`.
-- `prompt_suite_version` is the approved version for the run, initially `1.0.0`.
+- `prompt_suite_version` is the approved version for the run, for the current final synthetic suite it is `1.0.1`.
 - The prompt fixture comes from the synthetic offline final suite.
 - `cache_mismatch` is `false`.
 - `fixture_prompt_token_count` and `runtime_prompt_eval_token_count` are both present.
