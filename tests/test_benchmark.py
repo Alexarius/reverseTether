@@ -23,6 +23,7 @@ from client.benchmark import (
     MatrixConfig,
     MatrixRunResult,
     build_completion_payload,
+    evaluate_cache_policy,
     extract_prompt_token_count,
     parse_sse_line,
     run_benchmark,
@@ -88,7 +89,7 @@ class TestBenchmarkLogging(unittest.TestCase):
 
             with patch(
                 "client.benchmark.stream_completion",
-                return_value=(timing, [{"tokens_evaluated": 42}], "eos"),
+                return_value=(timing, [{"tokens_evaluated": 43}], "eos"),
             ), patch("client.benchmark.uuid.uuid4", return_value="test-run-id"):
                 record = run_benchmark(
                     prompt="Test prompt",
@@ -137,7 +138,7 @@ class TestBenchmarkLogging(unittest.TestCase):
             self.assertEqual(record.prompt_suite_version, "1.0.0")
             self.assertEqual(record.cache_policy, "system_managed")
             self.assertEqual(record.fixture_prompt_token_count, 45)
-            self.assertEqual(record.runtime_prompt_eval_token_count, 42)
+            self.assertEqual(record.runtime_prompt_eval_token_count, 43)
             self.assertEqual(record.prompt_token_count_source, "llama.cpp_server")
             self.assertEqual(record.dataset_name, "smoke_dataset")
             self.assertEqual(record.dataset_split, "dev")
@@ -154,7 +155,7 @@ class TestBenchmarkLogging(unittest.TestCase):
             self.assertEqual(raw_record["prompt_suite_version"], "1.0.0")
             self.assertEqual(raw_record["cache_policy"], "system_managed")
             self.assertEqual(raw_record["fixture_prompt_token_count"], 45)
-            self.assertEqual(raw_record["runtime_prompt_eval_token_count"], 42)
+            self.assertEqual(raw_record["runtime_prompt_eval_token_count"], 43)
             self.assertEqual(raw_record["prompt_token_count_source"], "llama.cpp_server")
             self.assertEqual(raw_record["dataset_name"], "smoke_dataset")
             self.assertEqual(raw_record["dataset_split"], "dev")
@@ -545,12 +546,34 @@ class TestCachePolicyEvaluation(unittest.TestCase):
         self.assertEqual(raw_record["runtime_prompt_eval_token_count"], 1)
         self.assertTrue(raw_record["cache_mismatch"])
 
-    def test_less_than_ten_percent_prompt_eval_sets_mismatch(self):
-        """A runtime prompt eval count below 10% of the fixture is collapsed."""
+    def test_one_token_fast_collapse_is_preserved_with_fixture_count(self):
+        """A 1-token runtime eval stays collapsed even when fixture metadata exists."""
+        cache_expected, cache_observed, cache_mismatch = evaluate_cache_policy(
+            cache_policy="disabled",
+            fixture_prompt_token_count=200,
+            runtime_prompt_eval_token_count=1,
+        )
+
+        self.assertFalse(cache_expected)
+        self.assertEqual(cache_observed, "collapsed_eval")
+        self.assertTrue(cache_mismatch)
+
+        cache_expected, cache_observed, cache_mismatch = evaluate_cache_policy(
+            cache_policy="disabled",
+            fixture_prompt_token_count=2,
+            runtime_prompt_eval_token_count=1,
+        )
+
+        self.assertFalse(cache_expected)
+        self.assertEqual(cache_observed, "collapsed_eval")
+        self.assertTrue(cache_mismatch)
+
+    def test_more_than_two_tokens_below_fixture_sets_mismatch(self):
+        """A runtime prompt eval count more than two below fixture is collapsed."""
         record, _ = self._run_with_runtime_prompt_count(
             cache_policy="disabled",
             fixture_prompt_token_count=200,
-            runtime_prompt_eval_token_count=19,
+            runtime_prompt_eval_token_count=197,
         )
 
         self.assertEqual(record.cache_observed, "collapsed_eval")
@@ -638,6 +661,31 @@ class TestCachePolicyEvaluation(unittest.TestCase):
 
             stream_mock.assert_called_once()
             self.assertFalse((output_dir / "raw_metrics.jsonl").exists())
+
+    def test_final_dataset_mock_uses_fixture_count_for_cache_gate(self):
+        """Mock final-dataset runs should emit fixture prompt count deterministically."""
+        config = BenchmarkConfig(
+            node="yoga",
+            backend="cpu",
+            run_type="warm",
+            prompt_tier="short",
+            suite_type="final_dataset",
+            cache_policy="disabled",
+            fixture_prompt_token_count=100,
+            mock=True,
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            record = run_benchmark(
+                prompt="Test prompt",
+                prompt_id="short_final_1",
+                config=config,
+                output_dir=Path(temp_dir),
+            )
+
+        self.assertEqual(record.runtime_prompt_eval_token_count, 100)
+        self.assertEqual(record.cache_observed, "full_eval")
+        self.assertFalse(record.cache_mismatch)
 
 
 class TestReproducibilityValidation(unittest.TestCase):

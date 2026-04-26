@@ -165,7 +165,9 @@ def build_completion_payload(prompt: str, config: BenchmarkConfig) -> dict:
     }
 
 
-def generate_mock_timing() -> tuple[TimingData, list[dict], str]:
+def generate_mock_timing(
+    fixture_prompt_token_count: Optional[int] = None,
+) -> tuple[TimingData, list[dict], str]:
     """Generate mock timing data for dry-run testing.
 
     Returns:
@@ -200,6 +202,12 @@ def generate_mock_timing() -> tuple[TimingData, list[dict], str]:
         final_token_wallclock=final_token_wallclock,
     )
 
+    mock_prompt_token_count = (
+        fixture_prompt_token_count
+        if fixture_prompt_token_count is not None
+        else random.randint(20, 100)
+    )
+
     # Generate mock events
     events = [
         {"content": f"mock_token_{i}", "stop": False}
@@ -210,7 +218,7 @@ def generate_mock_timing() -> tuple[TimingData, list[dict], str]:
         "stop": True,
         "stop_type": "eos",
         "tokens_predicted": mock_token_count,
-        "tokens_evaluated": random.randint(20, 100),  # Mock prompt tokens
+        "tokens_evaluated": mock_prompt_token_count,
     })
 
     return timing, events, "eos"
@@ -298,9 +306,8 @@ def evaluate_cache_policy(
             fixture_prompt_token_count is not None
             and fixture_prompt_token_count > 0
         ):
-            collapsed_eval = (
-                collapsed_eval
-                or runtime_prompt_eval_token_count < fixture_prompt_token_count * 0.10
+            collapsed_eval = collapsed_eval or runtime_prompt_eval_token_count < (
+                fixture_prompt_token_count - 2
             )
         cache_observed = "collapsed_eval" if collapsed_eval else "full_eval"
     elif policy_reports_pollution:
@@ -673,7 +680,9 @@ def run_benchmark(
 
     # Execute the benchmark (real or mock)
     if config.mock:
-        timing, events, stop_reason = generate_mock_timing()
+        timing, events, stop_reason = generate_mock_timing(
+            fixture_prompt_token_count=config.fixture_prompt_token_count,
+        )
     else:
         timing, events, stop_reason = stream_completion(prompt, config)
 
