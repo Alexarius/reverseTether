@@ -42,7 +42,7 @@ where records inside the directory identify:
 
 - `prompt_suite_id`: `dataset_suite_v1`
 - `prompt_suite_type`: `synthetic`
-- `prompt_suite_version`: `1.0.0`
+- `prompt_suite_version`: `1.0.1`
 - `cache_policy`: approved final policy
 - `cache_mismatch`: `false`
 
