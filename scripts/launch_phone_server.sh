@@ -28,7 +28,7 @@ SERVER_HOST="127.0.0.1"
 
 BACKEND="cpu"
 MODEL_PATH="${DEFAULT_MODEL_PATH}"
-EXTRA_ARGS=""
+EXTRA_ARGS="${EXTRA_ARGS:-}"
 VERBOSE=0
 
 print_usage() {
@@ -47,7 +47,19 @@ print_usage() {
     echo ""
     echo "Environment variables:"
     echo "  LLAMA_CPP_DIR  Path to llama.cpp directory (default: ~/llama.cpp)"
+    echo "  EXTRA_ARGS     Extra llama-server args appended before any --extra-args values"
 }
+
+# ==============================================================================
+# Extra llama.cpp arguments
+# ==============================================================================
+#
+# EXTRA_ARGS may be set in the environment for final evidence runs when the exact
+# server flags need to be recorded and repeated, for example:
+#   EXTRA_ARGS="--no-context-shift --prompt-cache-ro"
+#
+# CLI --extra-args values are appended to the environment value so temporary
+# additions can be layered without losing the documented baseline flags.
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -64,7 +76,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --extra-args)
-            EXTRA_ARGS="$2"
+            EXTRA_ARGS="${EXTRA_ARGS} $2"
             shift 2
             ;;
         --verbose)
