@@ -602,6 +602,7 @@ def create_failed_run_record(
         benchmark_condition_id=benchmark_condition_id,
         node=config.node,
         backend=config.backend,
+        mock_mode=config.mock,
         server_mode=config.server_mode,
         laptop_identifier=config.laptop_identifier,
         phone_identifier=config.phone_identifier,
@@ -748,6 +749,7 @@ def run_benchmark(
         benchmark_condition_id=benchmark_condition_id,
         node=config.node,
         backend=config.backend,
+        mock_mode=config.mock,
         server_mode=config.server_mode,
         # Device/runtime metadata
         laptop_identifier=config.laptop_identifier,

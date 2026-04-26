@@ -89,7 +89,7 @@ class TestAggregateOutputLayout(unittest.TestCase):
 class TestAggregateFiltering(unittest.TestCase):
     """Tests for default final-evidence filtering."""
 
-    def test_default_aggregation_excludes_legacy_smoke_and_cache_mismatch(self):
+    def test_default_aggregation_excludes_legacy_smoke_cache_mismatch_and_mock(self):
         """Default aggregation should keep only eligible final evidence records."""
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -140,6 +140,23 @@ class TestAggregateFiltering(unittest.TestCase):
                         "cache_mismatch": True,
                     },
                     {
+                        "run_id": "mock-run",
+                        "benchmark_condition_id": "yoga_cpu_local_Q4_0",
+                        "regime": "warm",
+                        "prompt_tier": "short",
+                        "stop_reason": "eos",
+                        "ttft_ms": 125.0,
+                        "decode_tps": 12.5,
+                        "source_dir": "mock_dir",
+                        "suite_type": "synthetic",
+                        "cache_policy": "disabled",
+                        "cache_expected": False,
+                        "cache_observed": "full_eval",
+                        "cache_mismatch": False,
+                        "mock_mode": True,
+                        "source_article_id": "fixed_offline_baseline_short_01",
+                    },
+                    {
                         "run_id": "final-run",
                         "benchmark_condition_id": "yoga_cpu_local_Q4_0",
                         "regime": "warm",
@@ -178,7 +195,7 @@ class TestAggregateFiltering(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             self.assertIn(
-                "Final evidence strict filter dropped 3 records.",
+                "Final evidence strict filter dropped 4 records.",
                 "\n".join(logs.output),
             )
 

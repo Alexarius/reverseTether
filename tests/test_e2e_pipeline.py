@@ -15,9 +15,9 @@ from client.matrix import main as matrix_main
 
 
 class TestMockPipelineFinalEvidence(unittest.TestCase):
-    """Verify final-suite mock matrix output survives strict evidence filtering."""
+    """Verify final-suite mock matrix output is excluded from final evidence."""
 
-    def test_mock_matrix_synthetic_survives_final_evidence_filter(self):
+    def test_mock_matrix_synthetic_excluded_from_final_evidence_filter(self):
         repo_root = Path(__file__).resolve().parents[1]
         suite_path = repo_root / "configs" / "prompts" / "dataset_suite_v1.json"
 
@@ -60,16 +60,13 @@ class TestMockPipelineFinalEvidence(unittest.TestCase):
                 if line.strip()
             ]
             self.assertGreater(len(records), 0)
+            self.assertTrue(all(record.get("mock_mode") is True for record in records))
 
             filtered = apply_final_evidence_filter(pd.DataFrame(records))
 
-            self.assertFalse(filtered.empty)
-            self.assertEqual(filtered["suite_type"].tolist(), ["synthetic"])
-            self.assertEqual(filtered["cache_policy"].tolist(), ["cleared_by_restart"])
-            self.assertEqual(filtered["cache_observed"].tolist(), ["full_eval"])
-            self.assertEqual(filtered["cache_mismatch"].tolist(), [False])
+            self.assertTrue(filtered.empty)
 
-    def test_mock_matrix_all_final_prompts_survives_final_evidence_filter(self):
+    def test_mock_matrix_all_final_prompts_excluded_from_final_evidence_filter(self):
         repo_root = Path(__file__).resolve().parents[1]
         suite_path = repo_root / "configs" / "prompts" / "dataset_suite_v1.json"
 
@@ -111,10 +108,11 @@ class TestMockPipelineFinalEvidence(unittest.TestCase):
                 if line.strip()
             ]
             self.assertGreater(len(records), 0)
+            self.assertTrue(all(record.get("mock_mode") is True for record in records))
 
             filtered = apply_final_evidence_filter(pd.DataFrame(records))
 
-            self.assertEqual(len(filtered), len(records))
+            self.assertTrue(filtered.empty)
 
     def test_final_suite_end_to_end_aggregation(self):
         repo_root = Path(__file__).resolve().parents[1]
@@ -156,11 +154,11 @@ class TestMockPipelineFinalEvidence(unittest.TestCase):
             self.assertTrue(raw_metrics_path.exists())
 
             df = pd.read_json(raw_metrics_path, lines=True)
+            self.assertIn("mock_mode", df.columns)
+            self.assertTrue(df["mock_mode"].all())
             filtered = apply_final_evidence_filter(df)
 
-            self.assertFalse(filtered.empty)
-            self.assertEqual(len(filtered), 15)
-            self.assertTrue((filtered["suite_type"] == "synthetic").all())
+            self.assertTrue(filtered.empty)
 
 
 if __name__ == "__main__":

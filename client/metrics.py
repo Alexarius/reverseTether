@@ -139,6 +139,7 @@ class RunRecord:
     backend: str  # cpu, opencl, npu_experimental
 
     # Fields with defaults below
+    mock_mode: bool = False
     suite_type: str = "unknown"  # unknown, smoke, synthetic
     prompt_suite_type: str = ""
     prompt_suite_id: str = ""

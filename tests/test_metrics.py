@@ -159,6 +159,7 @@ class TestRunRecord(unittest.TestCase):
         self.assertEqual(record.temperature, 0.0)
         self.assertEqual(record.max_new_tokens, 512)
         self.assertEqual(record.server_mode, "local")
+        self.assertFalse(record.mock_mode)
         self.assertEqual(record.suite_type, "unknown")
         self.assertEqual(record.prompt_suite_type, "")
         self.assertEqual(record.prompt_suite_id, "")

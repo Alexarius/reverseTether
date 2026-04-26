@@ -812,6 +812,7 @@ class TestReproducibilityValidation(unittest.TestCase):
             self.assertEqual(record.prompt_token_count, 7)
             self.assertEqual(record.runtime_prompt_eval_token_count, 7)
             self.assertEqual(record.cache_observed, "full_eval")
+            self.assertTrue(record.mock_mode)
             self.assertTrue((output_dir / "metadata.json").exists())
             self.assertTrue((output_dir / "raw_metrics.jsonl").exists())
 

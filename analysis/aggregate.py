@@ -241,6 +241,7 @@ def apply_final_evidence_filter(df: pd.DataFrame) -> pd.DataFrame:
     )
     cache_expected = _field_true_mask(df, "cache_expected")
     cache_mismatch = _field_true_mask(df, "cache_mismatch")
+    is_mock = _field_true_mask(df, "mock_mode")
     is_failure = stop_text.eq("error").fillna(False) | ttft_ms.eq(0.0).fillna(False)
     cache_verified = observed_text.eq("full_eval").fillna(False) | is_failure
     keep_mask = (
@@ -250,6 +251,7 @@ def apply_final_evidence_filter(df: pd.DataFrame) -> pd.DataFrame:
         & cache_text.isin(FINAL_EVIDENCE_CACHE_POLICIES)
         & ~cache_expected
         & ~cache_mismatch
+        & ~is_mock
         & cache_verified
         & source_article_present
     )
