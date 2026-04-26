@@ -23,7 +23,7 @@ from .benchmark import (
 
 SOAK_PROMPT_TIER = "soak"
 SMOKE_SUITE_TYPE = "smoke"
-FINAL_DATASET_SUITE_TYPE = "final_dataset"
+FINAL_DATASET_SUITE_TYPE = "synthetic"
 DEFAULT_PROMPT_SUITE_PATH = Path("configs/prompts/dataset_suite_v1.json")
 FINAL_DATASET_BUCKET_COUNTS = {"short": 5, "medium": 5, "long": 5, "soak": 1}
 FINAL_DATASET_BUCKET_TOKEN_RANGES = {
@@ -49,7 +49,7 @@ def validate_prompt_suite(suite: dict) -> None:
     """Validate prompt suite structure before any benchmark timing begins."""
     suite_type = suite.get("suite_type")
     if suite_type not in VALID_SUITE_TYPES:
-        raise ValueError("Prompt suite must define suite_type as 'smoke' or 'final_dataset'")
+        raise ValueError("Prompt suite must define suite_type as 'smoke' or 'synthetic'")
 
     prompts = suite.get("prompts")
     if not isinstance(prompts, dict):
@@ -75,27 +75,27 @@ def validate_prompt_suite(suite: dict) -> None:
 
     dataset_metadata = suite.get("dataset_metadata")
     if not isinstance(dataset_metadata, dict):
-        raise ValueError("Final dataset suite must define dataset_metadata as an object")
+        raise ValueError("Synthetic final suite must define dataset_metadata as an object")
 
     bucket_counts = {tier: 0 for tier in FINAL_DATASET_BUCKET_COUNTS}
     for prompt_key, prompt_data in prompts.items():
         fixture_count = prompt_data.get("fixture_prompt_token_count")
         if not isinstance(fixture_count, int) or isinstance(fixture_count, bool):
             raise ValueError(
-                f"Final dataset prompt '{prompt_key}' must define integer "
+                f"Synthetic final prompt '{prompt_key}' must define integer "
                 "fixture_prompt_token_count"
             )
 
         tier = prompt_data.get("tier")
         if tier not in FINAL_DATASET_BUCKET_COUNTS:
             raise ValueError(
-                f"Final dataset prompt '{prompt_key}' must use tier "
+                f"Synthetic final prompt '{prompt_key}' must use tier "
                 "'short', 'medium', 'long', or 'soak'"
             )
         low, high = FINAL_DATASET_BUCKET_TOKEN_RANGES[tier]
         if fixture_count < low or fixture_count > high:
             raise ValueError(
-                f"Final dataset prompt '{prompt_key}' has "
+                f"Synthetic final prompt '{prompt_key}' has "
                 f"fixture_prompt_token_count {fixture_count} outside "
                 f"the {tier} bucket range {low}-{high}"
             )
@@ -107,14 +107,14 @@ def validate_prompt_suite(suite: dict) -> None:
         )
         if missing_metadata_fields:
             raise ValueError(
-                f"Final dataset prompt '{prompt_key}' is missing required "
+                f"Synthetic final prompt '{prompt_key}' is missing required "
                 f"metadata fields: {', '.join(missing_metadata_fields)}"
             )
         for field in sorted(FINAL_DATASET_FIXTURE_METADATA_FIELDS):
             value = prompt_data[field]
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(
-                    f"Final dataset prompt '{prompt_key}' must define "
+                    f"Synthetic final prompt '{prompt_key}' must define "
                     f"non-empty string metadata field '{field}'"
                 )
 
@@ -122,7 +122,7 @@ def validate_prompt_suite(suite: dict) -> None:
 
     if bucket_counts != FINAL_DATASET_BUCKET_COUNTS:
         raise ValueError(
-            "Final dataset prompt bucket counts must be "
+            "Synthetic final prompt bucket counts must be "
             f"{FINAL_DATASET_BUCKET_COUNTS}; got {bucket_counts}"
         )
 

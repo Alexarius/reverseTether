@@ -228,7 +228,7 @@ def apply_final_evidence_filter(df: pd.DataFrame) -> pd.DataFrame:
     keep_mask = (
         suite_present
         & cache_present
-        & suite_text.eq("final_dataset").fillna(False)
+        & suite_text.eq("synthetic").fillna(False)
         & cache_text.isin(FINAL_EVIDENCE_CACHE_POLICIES)
         & ~cache_expected
         & ~cache_mismatch

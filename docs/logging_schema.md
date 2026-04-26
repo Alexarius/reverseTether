@@ -57,7 +57,7 @@ These fields are required for valid benchmark comparisons per DECISION_LOG.md DL
 | `server_mode` | string | Server location: `local` or `phone` |
 | `prompt_suite_id` | string | Stable suite identifier, e.g., `smoke_suite_v1` or `dataset_suite_v1` |
 | `prompt_suite_version` | string | Version of the prompt suite, e.g., `1.0.0` |
-| `prompt_suite_type` | string | Prompt suite category: `smoke` or `final_dataset` |
+| `prompt_suite_type` | string | Prompt suite category: `smoke` or `synthetic` |
 | `suite_type` | string | Legacy alias for `prompt_suite_type`; may appear in older records |
 | `cache_policy` | string | Cache handling policy, e.g., `disabled`, `cleared_by_restart`, `unknown`, or `unsupported_unverified` |
 | `cache_expected` | boolean | Whether prompt/KV cache reuse was expected for this measured request; must be `false` for final evidence |
@@ -109,7 +109,7 @@ These fields are mandatory for final dataset records and optional for smoke/deve
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `dataset_name` | string | Dataset family used for the fixture, e.g., `cnn_dailymail` |
+| `dataset_name` | string | Dataset family used for the fixture, e.g., `synthetic_offline_fixture` |
 | `dataset_split` | string | Dataset split or fixed offline partition, e.g., `validation` |
 | `dataset_source_id` | string | Stable source record ID or offline fixture source ID |
 | `source_article_sha256` | string | SHA-256 or placeholder identifier for the source article used to build the fixture |
@@ -129,14 +129,14 @@ The smoke prompt suite uses a versioned ID format: `<tier>_smoke_v<N>` (e.g., `s
 **Rules:**
 1. Never modify prompt text without incrementing the version number
 2. Smoke prompt IDs must match the prompt tier prefix (e.g., `short_smoke_v1` for tier `short`)
-3. Smoke prompt definitions live in `configs/prompts/smoke_suite.json`; final dissertation prompt definitions live in `configs/prompts/dataset_suite_v1.json`.
+3. Smoke prompt definitions live in `configs/prompts/smoke_suite.json`; synthetic final dissertation prompt definitions live in `configs/prompts/dataset_suite_v1.json`.
 
-#### Token Count Integrity (Issue 09 and Final Dataset Gate)
+#### Token Count Integrity (Issue 09 and Synthetic Final Gate)
 
 **Critical**: runtime prompt token counts must be recorded from the llama.cpp server response, never guessed.
 `fixture_prompt_token_count` is static suite metadata only; it can help audit the selected fixture, but it is not a measurement and must not be used for dynamic runtime token accounting.
 
-For final dataset records:
+For synthetic final records:
 
 - `fixture_prompt_token_count` records the full fixture token count.
 - `runtime_prompt_eval_token_count` records the runtime-evaluated prompt tokens.
@@ -220,8 +220,8 @@ absent or `null`. Missing thermal data must not be replaced with guessed values.
   "server_mode": "local",
   "prompt_suite_id": "dataset_suite_v1",
   "prompt_suite_version": "1.0.0",
-  "prompt_suite_type": "final_dataset",
-  "suite_type": "final_dataset",
+  "prompt_suite_type": "synthetic",
+  "suite_type": "synthetic",
   "cache_policy": "disabled",
   "cache_expected": false,
   "cache_observed": "full_eval",
@@ -248,13 +248,13 @@ absent or `null`. Missing thermal data must not be replaced with guessed values.
   "runtime_prompt_eval_token_count": 128,
   "prompt_token_count": 128,
   "prompt_token_count_source": "llama_cpp_tokens_evaluated",
-  "dataset_name": "cnn_dailymail",
-  "dataset_split": "validation",
-  "dataset_source_id": "fixed_offline_final_short_01",
-  "source_article_sha256": "placeholder_source_article_sha256_final_short_01",
-  "truncation_rule": "fixed_offline_to_short_prompt",
+  "dataset_name": "synthetic_offline_fixture",
+  "dataset_split": "final",
+  "dataset_source_id": "fixed_offline_baseline_short_01",
+  "source_article_sha256": "synthetic_offline_fixture",
+  "truncation_rule": "fixed_offline_bucket_v1",
   "prompt_fixture_sha256": "placeholder_prompt_fixture_sha256_final_short_01",
-  "tokenizer_runtime_used": "placeholder_llama_3_2_1b_instruct_tokenizer",
+  "tokenizer_runtime_used": "llama_3_2_1b_instruct_tokenizer",
   "generated_token_count": 87,
   "stop_reason": "eos",
   "request_sent_timestamp": "2026-03-25T14:30:52.123456",
@@ -363,4 +363,4 @@ pytest tests/test_cli.py -k "prompt" -v
 | 1.0.0 | 2026-03-25 | Initial schema with mandatory reproducibility fields |
 | 1.1.0 | 2026-04-20 | Documented optional pre/post thermal, battery, and anomaly context fields for Issue 11 |
 | 1.2.0 | 2026-04-25 | Added prompt suite type, cache policy, and static fixture prompt token count metadata |
-| 1.3.0 | 2026-04-25 | Added final dataset metadata, runtime prompt count, and cache mismatch acceptance fields |
+| 1.3.0 | 2026-04-25 | Added synthetic final metadata, runtime prompt count, and cache mismatch acceptance fields |

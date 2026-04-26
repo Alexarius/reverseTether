@@ -73,11 +73,11 @@ Use the same prompt suite across all comparable conditions.
 The project uses two prompt-suite roles:
 
 - **Smoke / development suite**: short engineering prompts used for CLI smoke checks, parser validation, and local harness development. These prompts are not final dissertation evidence.
-- **Final dataset suite**: dataset-backed prompts used for final evidence collection and dissertation claims.
+- **Synthetic final suite**: synthetic offline fixture prompts used for final evidence collection and dissertation claims.
 
-The smoke suite may be referred to as `smoke_suite_v1` and is currently materialized as `configs/prompts/smoke_suite.json`. The final dataset suite may be referred to as `dataset_suite_v1` and is currently materialized as `configs/prompts/dataset_suite_v1.json`.
+The smoke suite may be referred to as `smoke_suite_v1` and is currently materialized as `configs/prompts/smoke_suite.json`. The synthetic final suite may be referred to as `dataset_suite_v1` and is currently materialized as `configs/prompts/dataset_suite_v1.json`.
 
-Final claims must use records whose prompt metadata identifies the suite as `final_dataset`. Historical `short_v1` records and `_smoke_v1` records are excluded from final evidence unless a later decision log entry explicitly changes that rule.
+Final claims must use records whose prompt metadata identifies the suite as `synthetic`. Historical `short_v1` records and `_smoke_v1` records are excluded from final evidence unless a later decision log entry explicitly changes that rule.
 
 ### Minimum prompt categories
 - **Short prompt**: representative of light interactive use.
@@ -88,7 +88,7 @@ Final claims must use records whose prompt metadata identifies the suite as `fin
 ### Prompt suite rules
 - Prompt text must be versioned in the repo.
 - Prompt token counts must be recorded from the runtime/tooling, not guessed manually.
-- Dataset-backed final fixtures must also record a fixed `fixture_prompt_token_count` for auditing the selected prompt text.
+- Synthetic final fixtures must also record a fixed `fixture_prompt_token_count` for auditing the selected prompt text.
 - Do not change prompt wording mid-series without versioning the suite.
 - Keep the soak workload fixed.
 

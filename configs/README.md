@@ -9,7 +9,7 @@ configs/
   prompts/
     smoke_suite.json     # Current materialized smoke/development prompt suite
     smoke_suite_v1.json  # Canonical methodology name for smoke suite v1, if materialized
-    dataset_suite_v1.json # Current materialized dataset-backed final prompt suite
+    dataset_suite_v1.json # Current materialized synthetic offline final prompt suite
   conditions/
     matrix.json          # Matrix run condition definitions
   server_metadata_schema.json  # Schema for server metadata validation
@@ -20,7 +20,7 @@ configs/
 Prompt suites are versioned JSON files containing prompts used by the benchmark harness. This ensures reproducibility and prevents prompt drift.
 
 - `prompts/smoke_suite.json`: development/smoke prompts used for explicit smoke checks. Methodology name: `smoke_suite_v1`.
-- `prompts/dataset_suite_v1.json`: dataset-backed final dissertation benchmark prompts. Methodology name: `dataset_suite_v1`.
+- `prompts/dataset_suite_v1.json`: synthetic offline final dissertation benchmark prompts. Methodology name: `dataset_suite_v1`.
 
 **Warning:** `short_v1` and any `_smoke_v1` prompt variants are not valid for final dissertation evidence.
 
@@ -29,29 +29,29 @@ Prompt suites are versioned JSON files containing prompts used by the benchmark 
 | Suite role | Suite type | Canonical methodology name | Current file | Use |
 |------------|------------|-----------------------------|--------------|-----|
 | Smoke / development | `smoke` | `smoke_suite_v1` | `prompts/smoke_suite.json` | CLI smoke checks and implementation validation |
-| Final dataset | `final_dataset` | `dataset_suite_v1` | `prompts/dataset_suite_v1.json` | Final dissertation evidence |
+| Synthetic final | `synthetic` | `dataset_suite_v1` | `prompts/dataset_suite_v1.json` | Final dissertation evidence |
 
-Final aggregation must include only records from the final dataset suite. Smoke-suite records are development validation only.
+Final aggregation must include only records from the synthetic final suite. Smoke-suite records are development validation only.
 
 ### Schema
 
 ```json
 {
   "version": "1.0.0",
-  "suite_type": "final_dataset",
+  "suite_type": "synthetic",
   "description": "Prompt suite description",
   "dataset_metadata": {
-    "dataset_name": "cnn_dailymail",
-    "dataset_split": "validation",
-    "truncation_rule": "fixed_offline_to_target_prompt_tiers"
+    "dataset_name": "synthetic_offline_fixture",
+    "dataset_split": "final",
+    "truncation_rule": "fixed_offline_bucket_v1"
   },
   "prompts": {
     "<stable_prompt_key>": {
       "id": "final_<tier>_<index>",
       "tier": "<tier>",
       "fixture_prompt_token_count": <number>,
-      "dataset_name": "cnn_dailymail",
-      "dataset_split": "validation",
+      "dataset_name": "synthetic_offline_fixture",
+      "dataset_split": "final",
       "dataset_source_id": "<stable_source_record_id>",
       "source_article_sha256": "<source_article_hash_or_placeholder>",
       "truncation_rule": "<documented_rule>",
@@ -73,15 +73,15 @@ Final aggregation must include only records from the final dataset suite. Smoke-
 | `long` | Prefill-heavy workload | High KV-cache pressure testing |
 | `soak` | Sustained-load testing | Thermal throttling detection |
 
-### Dataset-Backed Fixture Requirements
+### Synthetic Offline Fixture Requirements
 
-Final dataset prompts must include:
+Synthetic final prompts must include:
 
 - A stable prompt `id` that does not change without a suite version update.
 - `tier` with one of `short`, `medium`, `long`, or `soak`.
 - `fixture_prompt_token_count` for the full prompt text.
-- `dataset_name`, such as `cnn_dailymail`.
-- `dataset_split`, such as `train`, `validation`, or `test`.
+- `dataset_name`, such as `synthetic_offline_fixture`.
+- `dataset_split`, such as `final`.
 - `dataset_source_id` that traces the fixture to the source dataset record or fixed offline source.
 - `source_article_sha256` for the selected source article or fixed offline placeholder.
 - `truncation_rule` describing how the source text was shortened or shaped.
@@ -96,7 +96,7 @@ The fixture token count is metadata for reproducibility and cache detection. Run
 Per EXPERIMENT_PROTOCOL.md, prompt text must be versioned:
 
 1. **Smoke prompt IDs** use the format `<tier>_smoke_v<version>` (e.g., `short_smoke_v1`, `soak_smoke_v1`)
-2. **Final dataset prompt IDs** use stable final IDs such as `final_short_01`, tied to `dataset_suite_v1`
+2. **Synthetic final prompt IDs** use stable final IDs such as `final_short_01`, tied to `dataset_suite_v1`
 3. **Never modify** prompt text without incrementing the suite version number
 4. **Log the prompt_id and prompt suite metadata** in every benchmark record for reproducibility
 5. **Runtime token counts** are recorded from the runtime, not guessed
@@ -150,7 +150,7 @@ prompt_text, prompt_id = get_prompt_for_tier(suite, "short")
 
 This ensures decode TPS comparability across different models and tokenizers.
 
-If `runtime_prompt_eval_token_count` is much lower than `fixture_prompt_token_count` for a final dataset prompt, treat the record as cache-contaminated until reviewed.
+If `runtime_prompt_eval_token_count` is much lower than `fixture_prompt_token_count` for a synthetic final prompt, treat the record as cache-contaminated until reviewed.
 
 ## Related Documentation
 

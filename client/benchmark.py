@@ -32,7 +32,7 @@ DEFAULT_SEED = 42
 DEFAULT_MAX_TOKENS = 512
 DEFAULT_CONTEXT_LENGTH = 2048
 DEFAULT_PROMPT_TOKEN_COUNT_SOURCE = "llama.cpp_server"
-FINAL_DATASET_SUITE_TYPE = "final_dataset"
+FINAL_DATASET_SUITE_TYPE = "synthetic"
 MODEL_SHA256_PATTERN = re.compile(r"^[a-f0-9]{64}$")
 LLAMA_CPP_COMMIT_PATTERN = re.compile(r"^[a-f0-9]{40}$")
 WARM_CACHE_POLICIES = {
@@ -50,7 +50,7 @@ CACHE_POLLUTION_POLICIES = {
 
 
 class CacheGateError(RuntimeError):
-    """Raised when final-dataset cache evidence fails the acceptance gate."""
+    """Raised when synthetic final cache evidence fails the acceptance gate."""
 
     def __init__(
         self,
@@ -320,13 +320,13 @@ def evaluate_cache_policy(
     return cache_expected, cache_observed, cache_mismatch
 
 
-def enforce_final_dataset_cache_gate(
+def enforce_synthetic_cache_gate(
     config: BenchmarkConfig,
     cache_expected: bool,
     cache_observed: str,
     cache_mismatch: bool,
 ) -> None:
-    """Fail final-dataset runs when cache evidence is incompatible with final evidence."""
+    """Fail synthetic final runs when cache evidence is incompatible with final evidence."""
     if config.suite_type != FINAL_DATASET_SUITE_TYPE:
         return
 
@@ -334,7 +334,7 @@ def enforce_final_dataset_cache_gate(
         return
 
     message = (
-        "Final dataset cache gate failed: "
+        "Synthetic suite cache gate failed: "
         f"cache_policy={config.cache_policy!r}, "
         f"cache_expected={cache_expected}, "
         f"cache_observed={cache_observed!r}, "
@@ -668,7 +668,7 @@ def run_benchmark(
         fixture_prompt_token_count=config.fixture_prompt_token_count,
         runtime_prompt_eval_token_count=None,
     )
-    enforce_final_dataset_cache_gate(
+    enforce_synthetic_cache_gate(
         config=config,
         cache_expected=cache_expected,
         cache_observed=cache_observed,
@@ -708,7 +708,7 @@ def run_benchmark(
         fixture_prompt_token_count=config.fixture_prompt_token_count,
         runtime_prompt_eval_token_count=runtime_prompt_eval_token_count,
     )
-    enforce_final_dataset_cache_gate(
+    enforce_synthetic_cache_gate(
         config=config,
         cache_expected=cache_expected,
         cache_observed=cache_observed,

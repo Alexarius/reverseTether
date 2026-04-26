@@ -139,7 +139,7 @@ class RunRecord:
     backend: str  # cpu, opencl, npu_experimental
 
     # Fields with defaults below
-    suite_type: str = "unknown"  # unknown, smoke, final_dataset
+    suite_type: str = "unknown"  # unknown, smoke, synthetic
     prompt_suite_id: str = ""
     prompt_suite_version: str = ""
     cache_policy: str = "unknown"  # unknown, system_managed, cache_mismatch, cleared

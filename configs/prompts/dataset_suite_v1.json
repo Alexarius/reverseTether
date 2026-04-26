@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "suite_type": "final_dataset",
+  "suite_type": "synthetic",
   "description": "Final dissertation benchmark suite. Prompt text and fixture token counts are fixed for final evidence runs.",
   "dataset_metadata": {
     "dataset_name": "synthetic_offline_fixture",
@@ -9,7 +9,7 @@
     "status": "final",
     "approval_state": "content approved; ready for final evidence",
     "fixture_prompt_token_count_method": "precomputed via Llama-3.2-1B-Instruct tokenizer",
-    "notes": "Dataset derived from CNN/DailyMail. Fixed offline."
+    "notes": "Dataset derived from synthetic_offline_fixture. Fixed offline."
   },
   "prompts": {
     "final_short_01": {

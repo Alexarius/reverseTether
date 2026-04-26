@@ -591,14 +591,14 @@ class TestCachePolicyEvaluation(unittest.TestCase):
         self.assertEqual(record.cache_observed, "collapsed_eval")
         self.assertFalse(record.cache_mismatch)
 
-    def test_final_dataset_expected_cache_policy_raises_before_streaming(self):
+    def test_synthetic_expected_cache_policy_raises_before_streaming(self):
         """Final evidence runs must fail before invocation if cache reuse is expected."""
         config = BenchmarkConfig(
             node="yoga",
             backend="cpu",
             run_type="warm",
             prompt_tier="short",
-            suite_type="final_dataset",
+            suite_type="synthetic",
             cache_policy="warm_cache",
             fixture_prompt_token_count=100,
             model_sha256=VALID_MODEL_SHA256,
@@ -609,7 +609,7 @@ class TestCachePolicyEvaluation(unittest.TestCase):
             output_dir = Path(temp_dir)
 
             with patch("client.benchmark.stream_completion") as stream_mock:
-                with self.assertRaisesRegex(RuntimeError, "Final dataset cache gate"):
+                with self.assertRaisesRegex(RuntimeError, "Synthetic suite cache gate"):
                     run_benchmark(
                         prompt="Test prompt",
                         prompt_id="short_final_1",
@@ -620,14 +620,14 @@ class TestCachePolicyEvaluation(unittest.TestCase):
             stream_mock.assert_not_called()
             self.assertFalse((output_dir / "raw_metrics.jsonl").exists())
 
-    def test_final_dataset_runtime_cache_mismatch_raises_without_success_record(self):
+    def test_synthetic_runtime_cache_mismatch_raises_without_success_record(self):
         """Collapsed prompt evaluation must fail final runs before raw success logging."""
         config = BenchmarkConfig(
             node="yoga",
             backend="cpu",
             run_type="warm",
             prompt_tier="short",
-            suite_type="final_dataset",
+            suite_type="synthetic",
             cache_policy="disabled",
             fixture_prompt_token_count=100,
             model_sha256=VALID_MODEL_SHA256,
@@ -651,7 +651,7 @@ class TestCachePolicyEvaluation(unittest.TestCase):
                 "client.benchmark.stream_completion",
                 return_value=(timing, [{"stop": True, "tokens_evaluated": 1}], "eos"),
             ) as stream_mock:
-                with self.assertRaisesRegex(RuntimeError, "Final dataset cache gate"):
+                with self.assertRaisesRegex(RuntimeError, "Synthetic suite cache gate"):
                     run_benchmark(
                         prompt="Test prompt",
                         prompt_id="short_final_1",
@@ -662,14 +662,14 @@ class TestCachePolicyEvaluation(unittest.TestCase):
             stream_mock.assert_called_once()
             self.assertFalse((output_dir / "raw_metrics.jsonl").exists())
 
-    def test_final_dataset_mock_uses_fixture_count_for_cache_gate(self):
-        """Mock final-dataset runs should emit fixture prompt count deterministically."""
+    def test_synthetic_mock_uses_fixture_count_for_cache_gate(self):
+        """Mock synthetic final runs should emit fixture prompt count deterministically."""
         config = BenchmarkConfig(
             node="yoga",
             backend="cpu",
             run_type="warm",
             prompt_tier="short",
-            suite_type="final_dataset",
+            suite_type="synthetic",
             cache_policy="disabled",
             fixture_prompt_token_count=100,
             mock=True,
@@ -1669,7 +1669,7 @@ class TestMatrixRunner(unittest.TestCase):
             backend="cpu",
             run_type="warm",
             prompt_tier="short",
-            suite_type="final_dataset",
+            suite_type="synthetic",
             cache_policy="disabled",
             model_sha256=VALID_MODEL_SHA256,
             llama_cpp_commit=VALID_LLAMA_CPP_COMMIT,
@@ -1727,7 +1727,7 @@ class TestMatrixRunner(unittest.TestCase):
 
         self.assertEqual(len(results), 1)
         self.assertFalse(results[0].success)
-        self.assertIn("Final dataset cache gate failed", results[0].error_message)
+        self.assertIn("Synthetic suite cache gate failed", results[0].error_message)
         self.assertEqual(results[0].record.stop_reason, "error")
         self.assertFalse(results[0].record.cache_expected)
         self.assertEqual(results[0].record.cache_observed, "collapsed_eval")

@@ -2,8 +2,8 @@
 
 set -e
 
-echo "Starting final_input cleanup for legacy short_v1 dataset folders..."
+echo "Starting final_input cleanup for legacy and previous run folders..."
 
-find final_input/ -type d -name "*short_v1*" -exec rm -rf {} +
+find final_input/ -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +
 
 echo "final_input cleanup completed successfully."

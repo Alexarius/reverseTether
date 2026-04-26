@@ -16,7 +16,7 @@ from client.matrix import main as matrix_main
 class TestMockPipelineFinalEvidence(unittest.TestCase):
     """Verify final-suite mock matrix output survives strict evidence filtering."""
 
-    def test_mock_matrix_final_dataset_survives_final_evidence_filter(self):
+    def test_mock_matrix_synthetic_survives_final_evidence_filter(self):
         repo_root = Path(__file__).resolve().parents[1]
         suite_path = repo_root / "configs" / "prompts" / "dataset_suite_v1.json"
 
@@ -63,7 +63,7 @@ class TestMockPipelineFinalEvidence(unittest.TestCase):
             filtered = apply_final_evidence_filter(pd.DataFrame(records))
 
             self.assertFalse(filtered.empty)
-            self.assertEqual(filtered["suite_type"].tolist(), ["final_dataset"])
+            self.assertEqual(filtered["suite_type"].tolist(), ["synthetic"])
             self.assertEqual(filtered["cache_policy"].tolist(), ["cleared_by_restart"])
             self.assertEqual(filtered["cache_observed"].tolist(), ["full_eval"])
             self.assertEqual(filtered["cache_mismatch"].tolist(), [False])

@@ -10,9 +10,9 @@ This document does not redefine TTFT or decode TPS. TTFT remains measured at the
 
 Final dissertation evidence includes only records that satisfy all of the following:
 
-- `prompt_suite_type` is `final_dataset`.
+- `prompt_suite_type` is `synthetic`.
 - `prompt_suite_version` is the approved version for the run, initially `1.0.0`.
-- The prompt fixture comes from the dataset-backed final suite.
+- The prompt fixture comes from the synthetic offline final suite.
 - `cache_mismatch` is `false`.
 - `fixture_prompt_token_count` and `runtime_prompt_eval_token_count` are both present.
 - Raw records are stored in append-only `raw_metrics.jsonl` files.
@@ -26,9 +26,9 @@ The final methodology distinguishes two prompt suite roles:
 | Role | Canonical suite name | Current materialized file | Purpose | Final evidence? |
 |------|----------------------|---------------------------|---------|-----------------|
 | Development smoke suite | `smoke_suite_v1.json` | `configs/prompts/smoke_suite.json` | CLI smoke checks and implementation validation | No |
-| Dataset-backed final suite | `dataset_suite_v1.json` | `configs/prompts/dataset_suite_v1.json` | Final dissertation evidence runs | Yes |
+| Synthetic offline final suite | `dataset_suite_v1.json` | `configs/prompts/dataset_suite_v1.json` | Final dissertation evidence runs | Yes |
 
-The final dataset suite is derived from CNN/DailyMail-style summarization fixtures and records stable prompt IDs, dataset metadata, truncation rules, and fixture token counts. The materialized file name is `configs/prompts/dataset_suite_v1.json`.
+The final suite is derived from `synthetic_offline_fixture` summarization fixtures and records stable prompt IDs, dataset metadata, truncation rules, and fixture token counts. The materialized file name is `configs/prompts/dataset_suite_v1.json`.
 
 ## Result Sources
 
@@ -41,7 +41,7 @@ results/{YYYYMMDD_HHMMSS}_{node}_{backend}_{run_type}/raw_metrics.jsonl
 where records inside the directory identify:
 
 - `prompt_suite_id`: `dataset_suite_v1`
-- `prompt_suite_type`: `final_dataset`
+- `prompt_suite_type`: `synthetic`
 - `prompt_suite_version`: `1.0.0`
 - `cache_policy`: approved final policy
 - `cache_mismatch`: `false`
@@ -106,7 +106,7 @@ Final records must set:
 - `cache_observed`: `false`
 - `cache_mismatch`: `false`
 
-For final dataset prompts, `runtime_prompt_eval_token_count` must match the full fixture prompt evaluation. If the runtime reports a much smaller value, such as `1` after a repeated prompt, treat that as observed cache reuse and reject the record from final evidence.
+For synthetic final prompts, `runtime_prompt_eval_token_count` must match the full fixture prompt evaluation. If the runtime reports a much smaller value, such as `1` after a repeated prompt, treat that as observed cache reuse and reject the record from final evidence.
 
 If the runtime cannot disable cache reuse for warm or soak regimes, those regimes must not be accepted as final evidence until cache control is implemented or independently verified. Restarting between every soak request is not an acceptable substitute for soak evidence because it destroys the sustained-load condition.
 
@@ -119,7 +119,7 @@ Each cold-run repetition must use a fresh server process.
 3. Start the server with the approved model, quantization, context length, seed, and backend settings.
 4. Capture server launch arguments and server log path.
 5. Perform only non-generating readiness checks before the measured request.
-6. Send exactly one measured final dataset prompt for that cold repetition.
+6. Send exactly one measured synthetic final prompt for that cold repetition.
 7. Record TTFT from laptop request send to laptop first-token receipt.
 8. Record decode TPS only over the decode window after first token arrival.
 9. Stop the server after the repetition and archive `server_log.txt`.
@@ -147,7 +147,7 @@ The soak prompt may be repeated only when cache reuse is disabled or independent
 A final aggregation is acceptable only if all gates pass:
 
 - Raw logs are present and append-only.
-- Every included record uses `prompt_suite_type=final_dataset`.
+- Every included record uses `prompt_suite_type=synthetic`.
 - Every included record has dataset metadata fields populated.
 - Every included record has `cache_mismatch=false`.
 - Historical `short_v1` and smoke-suite records are filtered out by default.

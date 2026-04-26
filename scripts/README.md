@@ -9,7 +9,7 @@ This directory will contain scripts for:
 - ADB tunnel setup and verification,
 - benchmark run orchestration,
 - environment setup helpers.
-- `clean_final_input.sh`: removes legacy `*short_v1*` dataset folders from `final_input/` before final aggregation.
+- `clean_final_input.sh`: removes all legacy or previous run folders from `final_input/` before final aggregation.
 
 ## Status
 

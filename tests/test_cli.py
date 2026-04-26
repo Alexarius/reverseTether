@@ -108,7 +108,7 @@ class TestPromptSuiteValidation(unittest.TestCase):
                     "tier": tier,
                     "text": f"{tier} prompt {index}",
                     "fixture_prompt_token_count": VALID_FINAL_DATASET_TOKEN_COUNTS[tier],
-                    "dataset_name": "placeholder_cnn_dailymail",
+                    "dataset_name": "synthetic_offline_fixture",
                     "dataset_split": "placeholder_validation",
                     "dataset_source_id": f"placeholder_{prompt_key}",
                     "source_article_sha256": f"placeholder_source_sha256_{prompt_key}",
@@ -121,7 +121,7 @@ class TestPromptSuiteValidation(unittest.TestCase):
 
         return {
             "version": "1.0.0",
-            "suite_type": "final_dataset",
+            "suite_type": "synthetic",
             "dataset_metadata": {"status": "stub"},
             "prompts": prompts,
         }
@@ -141,7 +141,7 @@ class TestPromptSuiteValidation(unittest.TestCase):
         validate_prompt_suite(suite)
 
     def test_valid_final_suite_passes(self):
-        """Valid final dataset suite should pass validation."""
+        """Valid synthetic final suite should pass validation."""
         validate_prompt_suite(self._valid_final_suite())
 
     def test_duplicate_ids_fail_loudly(self):
@@ -170,7 +170,7 @@ class TestPromptSuiteValidation(unittest.TestCase):
             validate_prompt_suite(suite)
 
     def test_final_suite_missing_fixture_token_count_fails_loudly(self):
-        """Final dataset prompts must include fixture token counts."""
+        """Synthetic final prompts must include fixture token counts."""
         suite = self._valid_final_suite()
         del suite["prompts"]["final_short_1"]["fixture_prompt_token_count"]
 
@@ -178,7 +178,7 @@ class TestPromptSuiteValidation(unittest.TestCase):
             validate_prompt_suite(suite)
 
     def test_final_suite_incorrect_bucket_counts_fails_loudly(self):
-        """Final dataset suite must enforce exact tier bucket counts."""
+        """Synthetic final suite must enforce exact tier bucket counts."""
         suite = self._valid_final_suite()
         suite["prompts"]["final_short_1"]["tier"] = "medium"
         suite["prompts"]["final_short_1"]["fixture_prompt_token_count"] = (
@@ -189,7 +189,7 @@ class TestPromptSuiteValidation(unittest.TestCase):
             validate_prompt_suite(suite)
 
     def test_final_suite_fixture_count_outside_bucket_range_fails_loudly(self):
-        """Final dataset fixture token counts must stay inside strict tier ranges."""
+        """Synthetic final fixture token counts must stay inside strict tier ranges."""
         suite = self._valid_final_suite()
         suite["prompts"]["final_short_1"]["fixture_prompt_token_count"] = 95
 
@@ -197,7 +197,7 @@ class TestPromptSuiteValidation(unittest.TestCase):
             validate_prompt_suite(suite)
 
     def test_final_suite_missing_fixture_metadata_fails_loudly(self):
-        """Final dataset prompts must include per-fixture dataset metadata."""
+        """Synthetic final prompts must include per-fixture dataset metadata."""
         suite = self._valid_final_suite()
         del suite["prompts"]["final_short_1"]["dataset_name"]
 
@@ -250,7 +250,7 @@ class TestPromptTierExtraction(unittest.TestCase):
         """Should find the first prompt with a matching tier when keys are fixture IDs."""
         suite = {
             "version": "1.0.0",
-            "suite_type": "final_dataset",
+            "suite_type": "synthetic",
             "prompts": {
                 "final_short_stub_01": {
                     "id": "final_short_stub_01",
@@ -300,7 +300,7 @@ class TestPromptSelection(unittest.TestCase):
     def setUp(self):
         self.suite = {
             "version": "1.0.0",
-            "suite_type": "final_dataset",
+            "suite_type": "synthetic",
             "prompts": {
                 "alias_long": {
                     "id": "final_long_02",
@@ -529,7 +529,7 @@ class TestRealPromptSuiteIntegrity(unittest.TestCase):
         self.assertFalse(Path("configs/prompts/final_suite.json").exists())
         self.assertTrue(dataset_suite_path.exists())
         dataset_suite = load_prompt_suite(dataset_suite_path)
-        self.assertEqual(dataset_suite["suite_type"], "final_dataset")
+        self.assertEqual(dataset_suite["suite_type"], "synthetic")
         self.assertIn("dataset_metadata", dataset_suite)
         self.assertEqual(len(dataset_suite["prompts"]), 16)
 
@@ -554,7 +554,7 @@ class TestRealPromptSuiteIntegrity(unittest.TestCase):
                 "fixture_prompt_token_count_method": (
                     "precomputed via Llama-3.2-1B-Instruct tokenizer"
                 ),
-                "notes": "Dataset derived from CNN/DailyMail. Fixed offline.",
+                "notes": "Dataset derived from synthetic_offline_fixture. Fixed offline.",
             },
         )
         self.assertNotIn("stub", dataset_suite["description"].lower())
