@@ -6,7 +6,7 @@ env/
 results/
 paper/
 metadata_benchmarks/
-final_input/
+final_*/
 
 # Python Cache Files
 __pycache__/
