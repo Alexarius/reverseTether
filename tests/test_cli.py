@@ -567,7 +567,6 @@ class TestRealPromptSuiteIntegrity(unittest.TestCase):
                 "dataset_split",
                 "source_article_id",
                 "status",
-                "approval_state",
                 "fixture_prompt_token_count_method",
                 "notes",
             },

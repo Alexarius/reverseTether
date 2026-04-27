@@ -8,7 +8,7 @@ tables (.csv, .md) and plots (.png) to a summaries directory.
 
 Traceability: All derived outputs reference source run directories.
 Failed runs are counted but excluded from performance math.
-No silent filtering: Any excluded data is logged explicitly.
+Any excluded data is logged explicitly.
 No metric redefinition: TTFT and Decode TPS semantics are unchanged.
 """
 

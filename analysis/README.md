@@ -61,9 +61,3 @@ After generating summaries, verify the derived metrics:
    - **Mean Decode TPS**: Average of `decode_tps` values
    - **Failure count / error rate**: Count of rows where `stop_reason == "error"` or `ttft_ms == 0.0`
 5. Compare against the summary table values.
-
-## Related docs
-
-- `docs/PROJECT_BRIEF.md` for success definitions
-- `docs/EXPERIMENT_PROTOCOL.md` for metric definitions and summary outputs
-- `docs/ARCHITECTURE.md` for ownership boundaries

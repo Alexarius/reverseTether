@@ -123,19 +123,6 @@ To change a prompt:
 }
 ```
 
-## Loading Prompts in Code
-
-```python
-from client.cli import load_prompt_suite, get_prompt_for_tier
-
-# Load the suite
-suite = load_prompt_suite(Path("configs/prompts/smoke_suite.json"))
-
-# Get prompt text and ID for a tier
-prompt_text, prompt_id = get_prompt_for_tier(suite, "short")
-# prompt_id will be "short_smoke_v1" - logged in raw_metrics.jsonl
-```
-
 ## Token Count Handling
 
 **Critical**: Token counts must come from the llama.cpp runtime, not be guessed.

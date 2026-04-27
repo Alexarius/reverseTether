@@ -3,7 +3,6 @@
 ## Purpose
 
 This document defines the **canonical measurement protocol** for the project.  
-Any implementation detail that changes the meaning of these measurements requires explicit human approval.
 
 ## Canonical metrics
 

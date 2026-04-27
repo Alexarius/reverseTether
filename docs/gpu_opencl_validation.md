@@ -6,16 +6,6 @@ This note defines the controlled GPU/OpenCL validation path for the reverse-teth
 
 The CPU baseline logic, metric definitions, and aggregation math remain unchanged. GPU/OpenCL results must be logged and interpreted as a separate benchmark condition.
 
-## Benchmark Condition
-
-Use the following distinct benchmark condition id for Samsung Galaxy S25 Ultra GPU/OpenCL runs:
-
-```text
-s25ultra_gpu_opencl_Q4_0
-```
-
-This `benchmark_condition_id` must not be reused for CPU runs. CPU phone runs and laptop local CPU runs must keep their own condition ids so GPU/OpenCL data cannot be mixed into CPU baseline summaries.
-
 ## Runtime And Quantization
 
 The GPU/OpenCL validation path uses the same laptop-side measurement boundary as the CPU baseline:

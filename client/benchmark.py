@@ -205,7 +205,7 @@ def generate_mock_timing(
     )
 
     # Deterministically mirroring the fixture count keeps CI mock runs inside
-    # the strict +/-2 token synthetic cache gate.
+    # the +/-2 token synthetic cache gate.
     mock_prompt_token_count = (
         fixture_prompt_token_count
         if fixture_prompt_token_count is not None
@@ -336,7 +336,7 @@ def enforce_synthetic_cache_gate(
     cache_observed: str,
     cache_mismatch: bool,
 ) -> None:
-    """Fail synthetic final runs when cache evidence is incompatible with final evidence."""
+    """Fail synthetic final runs when cache evidence is incompatible"""
     if config.suite_type != FINAL_DATASET_SUITE_TYPE:
         return
 
@@ -397,7 +397,7 @@ def stream_completion(
     timing.request_sent_ts = time.perf_counter()
 
     # Use stream=True with small chunk iteration to detect first token accurately
-    # No retry logic - fail loudly if connection fails
+    # No retry logic - fail if connection fails
     response = requests.post(
         url,
         json=payload,
@@ -1152,7 +1152,6 @@ def run_matrix(
                         result.record = record
                     except Exception as e:
                         # Log failure but continue with matrix
-                        # CRITICAL: Do not silently skip - capture the error for audit
                         result.success = False
                         result.error_message = str(e)
                         failed_record_kwargs = {}
