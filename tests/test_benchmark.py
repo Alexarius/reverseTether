@@ -362,8 +362,6 @@ class TestStreamingTimingCapture(unittest.TestCase):
 
 class TestStreamingEdgeCases(unittest.TestCase):
     """Tests for edge cases in streaming measurement.
-
-    These address risks identified in the implementation plan:
     - Zero-token generation
     - Single-token generation
     - Network/library buffering effects

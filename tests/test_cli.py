@@ -484,7 +484,6 @@ class TestRealPromptSuiteIntegrity(unittest.TestCase):
             self.assertTrue(prompt_id.startswith(f"{tier}_smoke_v"))
 
     def test_smoke_suite_ids_are_expected_v1_values(self):
-        """Smoke prompt IDs should use the approved _smoke_v1 names."""
         expected_ids = {
             "short": "short_smoke_v1",
             "medium": "medium_smoke_v1",
@@ -523,7 +522,6 @@ class TestRealPromptSuiteIntegrity(unittest.TestCase):
         self.assertTrue(soak_data["id"].startswith("soak_smoke_v"))
 
     def test_dataset_suite_exists_with_approved_bucket_structure(self):
-        """Dataset suite v1 should be present with approved bucket structure."""
         dataset_suite_path = Path("configs/prompts/dataset_suite_v1.json")
         self.assertFalse(Path("configs/prompts/final_suite.json").exists())
         self.assertTrue(dataset_suite_path.exists())
@@ -540,7 +538,6 @@ class TestRealPromptSuiteIntegrity(unittest.TestCase):
         self.assertEqual(bucket_counts, {"short": 5, "medium": 5, "long": 5, "soak": 1})
 
     def test_dataset_suite_has_final_metadata(self):
-        """Dataset suite metadata should mark the fixture as approved final content."""
         dataset_suite = load_prompt_suite(Path("configs/prompts/dataset_suite_v1.json"))
         self.assertEqual(
             dataset_suite["dataset_metadata"],
@@ -549,7 +546,6 @@ class TestRealPromptSuiteIntegrity(unittest.TestCase):
                 "dataset_split": "final",
                 "source_article_id": "fixed_offline_baseline",
                 "status": "final",
-                "approval_state": "content approved; ready for final evidence",
                 "fixture_prompt_token_count_method": (
                     "precomputed via Llama-3.2-1B-Instruct tokenizer"
                 ),
@@ -559,7 +555,6 @@ class TestRealPromptSuiteIntegrity(unittest.TestCase):
         self.assertNotIn("stub", dataset_suite["description"].lower())
 
     def test_dataset_suite_schema_shape_matches_approved_metadata(self):
-        """Dataset suite prompts must include the approved fixture metadata schema."""
         dataset_suite = load_prompt_suite(Path("configs/prompts/dataset_suite_v1.json"))
         self.assertEqual(
             set(dataset_suite),
@@ -594,7 +589,6 @@ class TestRealPromptSuiteIntegrity(unittest.TestCase):
                 self.assertTrue(prompt_data[field])
 
     def test_dataset_suite_prompt_ids_and_token_count_bands(self):
-        """Dataset prompts should be versioned, distinct, and in approved token bands."""
         import re
 
         dataset_suite = load_prompt_suite(Path("configs/prompts/dataset_suite_v1.json"))
@@ -617,7 +611,6 @@ class TestRealPromptSuiteIntegrity(unittest.TestCase):
         self.assertEqual(len(texts), len(set(texts)))
 
     def test_dataset_suite_prompt_patterns(self):
-        """Dataset prompts should match the approved tier-specific text patterns."""
         dataset_suite = load_prompt_suite(Path("configs/prompts/dataset_suite_v1.json"))
         medium_instruction = (
             "Summarize the main arguments and identify two key individuals mentioned "
@@ -643,7 +636,7 @@ class TestRealPromptSuiteIntegrity(unittest.TestCase):
                 self.assertTrue(text.startswith("The following is a news excerpt. "))
                 self.assertTrue(text.endswith(soak_instruction))
 
-    def test_temporary_tokenizer_helper_not_committed(self):
+    def test_temporary_tokenizer_helper_not_committed(self): # temporary test to prevent accidental commits of precompute_tokens.py or transformers dependency
         """Temporary tokenizer code and dependencies must not remain in the harness."""
         self.assertFalse(Path("scripts/precompute_tokens.py").exists())
         requirements = Path("requirements.txt").read_text(encoding="utf-8").lower()

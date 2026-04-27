@@ -241,4 +241,4 @@ Any proposed change to:
 - fixed settings,
 - or comparison conditions
 
-must be recorded in `DECISION_LOG.md` before benchmarking continues.
+must be recorded before benchmarking continues.

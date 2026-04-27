@@ -276,8 +276,6 @@ absent or `null`. Missing thermal data must not be replaced with guessed values.
 
 ## Timing Precision
 
-Per the implementation plan:
-
 - **Interval measurements** (TTFT, decode TPS): Use `time.perf_counter()` for high-resolution monotonic timing
 - **Timestamp metadata**: Use `datetime.now().isoformat()` for human-readable wall-clock times
 - **I/O isolation**: All JSON serialization and disk writes occur AFTER the final token is received to avoid inflating measured metrics

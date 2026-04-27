@@ -7,7 +7,6 @@
     "dataset_split": "final",
     "source_article_id": "fixed_offline_baseline",
     "status": "final",
-    "approval_state": "content approved; ready for final evidence",
     "fixture_prompt_token_count_method": "precomputed via Llama-3.2-1B-Instruct tokenizer",
     "notes": "Dataset derived from synthetic_offline_fixture. Fixed offline."
   },
