@@ -276,7 +276,7 @@ class TestCompletionPayload(unittest.TestCase):
 class TestStreamingTimingCapture(unittest.TestCase):
     """Tests for streaming timing capture behavior.
 
-    These tests verify the critical timing boundaries from the implementation plan:
+    These tests verify the timing boundaries:
     - request_sent_ts is captured immediately BEFORE HTTP POST
     - first_token_ts is captured when first content token arrives
     - final_token_ts is captured when last content token arrives

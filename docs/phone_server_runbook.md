@@ -343,7 +343,7 @@ When reporting results, always include:
 - Model file name and checksum (if available)
 - Server launch command exactly as executed
 
-## Matrix Runner (Issue 08)
+## Matrix Runner
 
 The matrix runner executes benchmarks across multiple regimes (cold, warm, soak) with multiple repetitions per regime. This enables systematic collection of benchmark data for statistical analysis.
 

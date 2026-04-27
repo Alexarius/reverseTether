@@ -3,7 +3,7 @@
 Usage:
     python -m client.cli --node yoga --backend cpu --run-type cold --prompt-tier short
 
-This is a minimal CLI-first benchmark harness per Issue 03 requirements.
+This is a minimal CLI-first benchmark harness.
 No elaborate UI - just command-line interface for measurement.
 """
 

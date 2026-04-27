@@ -61,8 +61,6 @@ Reverse-tethered phone does not outperform the laptop, but the result is clearly
 
 ## Recommended implementation defaults
 
-These are defaults to reduce ambiguity for AI agents.
-
 - **Laptop harness language**: Python 3.11+ CLI.
 - **Logging**: JSONL for raw runs, CSV/Markdown for summaries.
 - **Analysis**: Python notebooks or scripts.

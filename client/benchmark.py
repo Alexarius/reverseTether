@@ -5,7 +5,7 @@ This module handles:
 - Processing streamed responses
 - Recording timestamps for TTFT and decode TPS computation
 
-Critical timing notes (from implementation plan):
+Critical timing notes:
 - Timer starts immediately BEFORE the HTTP request is invoked
 - stream=True must be used to detect first token arrival accurately
 - No hidden retries that inflate TTFT
