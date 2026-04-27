@@ -843,8 +843,6 @@ class TestReproducibilityValidation(unittest.TestCase):
 
 class TestPromptMetadataInJSONL(unittest.TestCase):
     """Tests for prompt metadata in JSONL records.
-
-    Per Issue 09 requirements:
     - prompt_id must be logged in every record for reproducibility
     - prompt_token_count must be captured from server response (not guessed)
     - These fields enable tracking prompt drift and token count accuracy
@@ -1223,8 +1221,6 @@ class TestPromptMetadataInJSONL(unittest.TestCase):
 
 class TestMatrixRunner(unittest.TestCase):
     """Tests for the benchmark matrix runner.
-
-    These tests verify Issue 08 requirements:
     - Correct repetition count per regime
     - Proper regime labels in JSONL records
     - Matrix metadata in output directory

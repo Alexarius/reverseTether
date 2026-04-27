@@ -98,7 +98,7 @@ python -m client.cli --node yoga --backend cpu --run-type warm --prompt-tier med
 python -m client.cli --node yoga --backend cpu --run-type cold --prompt-tier short --mock
 ```
 
-### Matrix Run (Issue 08)
+### Matrix Run
 
 Execute a benchmark matrix across multiple regimes with multiple repetitions per regime:
 

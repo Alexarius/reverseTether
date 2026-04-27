@@ -105,8 +105,7 @@ To change a prompt:
 
 1. Increment the version in the `id` field (e.g., `short_smoke_v1` to `short_smoke_v2`)
 2. Update the `text` field with the new content
-3. Record the change in `DECISION_LOG.md`
-4. All subsequent runs will use the new prompt and log the new ID
+3. All subsequent runs will use the new prompt and log the new ID
 
 ### Example
 

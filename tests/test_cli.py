@@ -48,8 +48,6 @@ VALID_FINAL_DATASET_TOKEN_COUNTS = {
 
 class TestPromptSuiteLoading(unittest.TestCase):
     """Tests for prompt suite fixture loading.
-
-    Per Issue 09 requirements:
     - Smoke suite must be loaded from configs/prompts/smoke_suite.json
     - Smoke suite must contain versioned smoke prompt IDs
     - Load errors must fail loudly, not silently
@@ -210,8 +208,6 @@ class TestPromptSuiteValidation(unittest.TestCase):
 
 class TestPromptTierExtraction(unittest.TestCase):
     """Tests for prompt tier extraction.
-
-    Per Issue 09 requirements:
     - get_prompt_for_tier must return the full prompt fixture object
     - prompt_id must be used in log records for reproducibility
     - Missing tiers must fail loudly

@@ -77,7 +77,7 @@ The project uses two prompt-suite roles:
 
 The smoke suite may be referred to as `smoke_suite_v1` and is currently materialized as `configs/prompts/smoke_suite.json`. The synthetic final suite may be referred to as `dataset_suite_v1` and is currently materialized as `configs/prompts/dataset_suite_v1.json`.
 
-Final claims must use records whose prompt metadata identifies the suite as `synthetic`. Historical `short_v1` records and `_smoke_v1` records are excluded from final evidence unless a later decision log entry explicitly changes that rule.
+Final claims must use records whose prompt metadata identifies the suite as `synthetic`. Historical `short_v1` records and `_smoke_v1` records are excluded from final evidence unless later explicit changes are made to that rule.
 
 ### Minimum prompt categories
 - **Short prompt**: representative of light interactive use.
@@ -106,7 +106,7 @@ If the runtime prompt evaluation count is unexpectedly lower than the fixture co
 ## Operating regimes
 
 ### Cold start
-Captures the first measured request after a fresh server process launch. Each cold repetition requires a server restart before the measured prompt. Any server startup or model-load duration must be recorded separately from TTFT unless a new metric is approved in `DECISION_LOG.md`.
+Captures the first measured request after a fresh server process launch. Each cold repetition requires a server restart before the measured prompt. Any server startup or model-load duration must be recorded separately from TTFT unless a new metric is approved.
 
 ### Warm start
 Captures normal interactive use with the model already resident.
@@ -130,7 +130,7 @@ Minimum summary outputs:
 
 Each run record **must** contain the following fields. Records missing mandatory fields are invalid and must be rejected by the benchmark harness.
 
-**Critical reproducibility fields** (see DECISION_LOG.md DL-20260322-03):
+**Critical reproducibility fields**
 - `model_sha256`: SHA-256 hash of the exact model file used.
 - `llama_cpp_commit`: Full 40-character git commit hash of the llama.cpp build.
 - `seed`: Fixed RNG seed (must be `42` for comparable runs).

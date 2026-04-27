@@ -121,7 +121,7 @@ class RunRecord:
     Fields follow the logging schema in EXPERIMENT_PROTOCOL.md.
     Required fields (no defaults) must come first.
 
-    Critical reproducibility fields (mandatory per DECISION_LOG.md DL-20260322-03):
+    Critical reproducibility fields
     - model_sha256: SHA-256 hash of the exact model file used
     - llama_cpp_commit: Full 40-character git commit hash
     - seed: Fixed RNG seed (must be 42 for comparable runs)

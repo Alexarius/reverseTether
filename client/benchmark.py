@@ -1056,7 +1056,7 @@ def run_matrix(
     # Create output directory
     actual_output_dir = create_matrix_output_directory(base_config, output_dir)
 
-    # Write matrix metadata
+    # Write matrix metadata once upfront (individual runs will skip metadata writing)
     write_matrix_metadata(base_config, matrix_config, prompts, actual_output_dir)
 
     results: List[MatrixRunResult] = []

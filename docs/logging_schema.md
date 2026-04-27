@@ -34,7 +34,7 @@ Each line in `raw_metrics.jsonl` is a complete JSON object representing one benc
 
 ### Critical Reproducibility Fields (MANDATORY)
 
-These fields are required for valid benchmark comparisons per DECISION_LOG.md DL-20260322-03:
+These fields are required for valid benchmark comparisons:
 
 | Field | Type | Description | Validation |
 |-------|------|-------------|------------|
@@ -117,7 +117,7 @@ These fields are mandatory for final dataset records and optional for smoke/deve
 | `prompt_fixture_sha256` | string | SHA-256 hash of the final prompt fixture text |
 | `tokenizer_runtime_used` | string | Tokenizer/runtime used to produce `fixture_prompt_token_count` |
 
-#### Prompt ID Versioning (Issue 09)
+#### Prompt ID Versioning
 
 The smoke prompt suite uses a versioned ID format: `<tier>_smoke_v<N>` (e.g., `short_smoke_v1`, `medium_smoke_v1`).
 
@@ -131,7 +131,7 @@ The smoke prompt suite uses a versioned ID format: `<tier>_smoke_v<N>` (e.g., `s
 2. Smoke prompt IDs must match the prompt tier prefix (e.g., `short_smoke_v1` for tier `short`)
 3. Smoke prompt definitions live in `configs/prompts/smoke_suite.json`; synthetic final dissertation prompt definitions live in `configs/prompts/dataset_suite_v1.json`.
 
-#### Token Count Integrity (Issue 09 and Synthetic Final Gate)
+#### Token Count Integrity
 
 **Critical**: runtime prompt token counts must be recorded from the llama.cpp server response, never guessed.
 `fixture_prompt_token_count` is static suite metadata only; it can help audit the selected fixture, but it is not a measurement and must not be used for dynamic runtime token accounting.
@@ -323,7 +323,7 @@ cat results/*_yoga_cpu_cold/raw_metrics.jsonl
 python -c "import json; [json.loads(line) for line in open('results/YYYYMMDD_HHMMSS_yoga_cpu_cold/raw_metrics.jsonl')]"
 ```
 
-### Prompt Metadata Verification (Issue 09)
+### Prompt Metadata Verification
 
 To verify prompt suite metadata and runtime prompt token counts are properly logged:
 
@@ -360,6 +360,6 @@ pytest tests/test_cli.py -k "prompt" -v
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0.0 | 2026-03-25 | Initial schema with mandatory reproducibility fields |
-| 1.1.0 | 2026-04-20 | Documented optional pre/post thermal, battery, and anomaly context fields for Issue 11 |
+| 1.1.0 | 2026-04-20 | Documented optional pre/post thermal, battery, and anomaly |
 | 1.2.0 | 2026-04-25 | Added prompt suite type, cache policy, and static fixture prompt token count metadata |
 | 1.3.0 | 2026-04-25 | Added synthetic final metadata, runtime prompt count, and cache mismatch acceptance fields |
