@@ -70,58 +70,66 @@ reverseTether/
 └── Dissertation - Jiuk Kim (Signed).pdf  # Full research dissertation
 ```
 
-## 🚀 Getting Started
+## 🚀 Getting Started (Quick Start)
 
-### Prerequisites
+For comprehensive setup, model downloading, metadata capture, and troubleshooting, please refer to the mandatory **[Phone Server Runbook](docs/phone_server_runbook.md)**.
 
-- **Python 3.11+**
-- **ADB** installed and on your `PATH`
-- A **USB cable** connecting the phone to the laptop
-- **llama.cpp** built on the phone (see [Phone Server Runbook](docs/phone_server_runbook.md))
-- A **GGUF model** (e.g., `Llama-3.2-1B-Instruct-Q4_0`) available on both devices
-
-### 1. Install Python Dependencies
+### 1. Install Laptop Dependencies
 
 ```bash
 python -m venv .venv
-# Windows
-.venv\Scripts\activate
-# Linux/macOS
-source .venv/bin/activate
-
+source .venv/bin/activate  # or .venv\Scripts\activate on Windows
 pip install -r requirements.txt
 ```
 
-### 2. Set Up the Phone (One-Time)
+### 2. Set Up the Phone (Termux)
 
-On the phone in Termux, build llama.cpp with OpenCL support. See [docs/phone_server_runbook.md](docs/phone_server_runbook.md) for detailed instructions.
-
-### 3. Start the Phone Server
+On the phone, open Termux to install dependencies and compile `llama.cpp`:
 
 ```bash
-# Launch llama.cpp server on the phone (via Termux or adb shell)
-./scripts/launch_phone_server.sh --cpu          # CPU-only
-./scripts/launch_phone_server.sh --gpu          # GPU/OpenCL
+# Install essential build tools
+pkg update && pkg install -y git cmake make ninja clang ocl-icd opencl-headers
+
+# Clone repository
+git clone [https://github.com/ggerganov/llama.cpp](https://github.com/ggerganov/llama.cpp) && cd llama.cpp
+unset LD_LIBRARY_PATH
+
+# Build for GPU/OpenCL support (Adreno):
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_OPENCL=ON -DGGML_OPENCL_USE_ADRENO_KERNELS=ON
+cmake --build build --config Release -j$(nproc)
+```
+*(Download the Q4_0 GGUF model to the phone as described in the runbook).*
+
+### 3. Launch Server & Establish ADB Bridge
+
+**On the Phone (Termux):**
+```bash
+./scripts/launch_phone_server.sh --gpu
 ```
 
-### 4. Establish the ADB Bridge
-
-On the laptop:
-
+**On the Laptop:**
 ```bash
+# Forward port 8080 over USB
 ./scripts/adb_bootstrap.sh
 ```
-This forwards `localhost:8080` on the laptop to port `8080` on the phone.
+
+### 4. Run Preflight Check
+
+Always validate the connection chain before benchmarking:
+```bash
+python -m client.preflight
+```
+*(Expected output: ADB Device [OK], Port Forwarding [OK], Server Health [OK])*
 
 ### 5. Run a Benchmark
 
 ```bash
-# Single run — phone, CPU backend, warm start, short prompt
-python -m client.cli --node s25u --backend cpu --run-type warm --prompt-tier short
+# Single run — phone, GPU backend, warm start, short prompt
+python -m client.cli --node s25ultra --backend opencl --run-type warm --prompt-tier short --server-mode phone
 
-# Matrix run — all regimes, 5 repetitions
-python -m client.matrix --node s25u --backend cpu \
-    --regimes cold,warm,soak --repetitions 5 --prompt-tier short
+# Full matrix run — all regimes, 5 repetitions
+python -m client.matrix --node s25ultra --backend opencl \
+    --regimes cold,warm,soak --repetitions 5 --prompt-tier short --server-mode phone
 ```
 
 ### 6. Analyze Results
@@ -135,8 +143,8 @@ python analysis/aggregate.py --input results/ --output results/summaries/
 **Conditions:**
 All conditions use identical generation settings: `Q4_0` quantization, seed `42`, temperature `0.0`, 2048-token context, and 512 max output tokens.
 1. `yoga_cpu_local`: Laptop CPU-only baseline
-2. `s25u_cpu_phone`: Phone CPU over reverse tether
-3. `s25u_gpu_opencl_phone`: Phone GPU/OpenCL over reverse tether
+2. `s25ultra_cpu_phone`: Phone CPU over reverse tether
+3. `s25ultra_opencl_phone`: Phone GPU/OpenCL over reverse tether
 
 **Regimes:**
 * **Cold**: Measures first-request latency after a fresh server launch.
